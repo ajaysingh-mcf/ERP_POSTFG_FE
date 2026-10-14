@@ -1,0 +1,55 @@
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
+import { api, ApiError } from '../api/client'
+import { ACCESS, AUTH_ENDPOINTS, ERROR_CODE, type AccessLevel } from '../constants/auth'
+
+/* The signed-in user from GET /auth/me; the session itself is the backend's httpOnly cookie. */
+
+export type User = { id: string; name: string; email: string; roles: string[] }
+type Me = { user: User; access: Record<string, AccessLevel> }
+
+type AuthState =
+  | { status: 'loading' }
+  | { status: 'signedOut'; error?: string }
+  | { status: 'signedIn'; user: User; access: Record<string, AccessLevel> }
+
+type AuthValue = AuthState & {
+  accessFor: (path: string) => AccessLevel
+  logout: () => Promise<void>
+}
+
+const AuthContext = createContext<AuthValue | null>(null)
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<AuthState>({ status: 'loading' })
+
+  useEffect(() => {
+    api<Me>(AUTH_ENDPOINTS.ME)
+      .then((me) => setState({ status: 'signedIn', user: me.user, access: me.access }))
+      .catch((e: unknown) => {
+        const code = e instanceof ApiError ? e.code : ERROR_CODE.NETWORK
+        setState({ status: 'signedOut', error: code === ERROR_CODE.UNAUTHENTICATED ? undefined : code })
+      })
+  }, [])
+
+  const accessFor = useCallback(
+    (path: string): AccessLevel => (state.status === 'signedIn' ? state.access[path] ?? ACCESS.NONE : ACCESS.NONE),
+    [state],
+  )
+
+  const logout = useCallback(async () => {
+    try {
+      await api(AUTH_ENDPOINTS.LOGOUT, { method: 'POST' })
+    } finally {
+      setState({ status: 'signedOut' })
+    }
+  }, [])
+
+  return <AuthContext.Provider value={{ ...state, accessFor, logout }}>{children}</AuthContext.Provider>
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext)
+  if (!ctx) throw new Error('useAuth must be used inside AuthProvider')
+  return ctx
+}

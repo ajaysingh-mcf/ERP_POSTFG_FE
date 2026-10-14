@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Download, Filter, MoreHorizontal, Search, Upload, X } from 'lucide-react'
 import { Badge, BulkUpload, downloadCsv } from './ui'
 import { fmtDate, statusTone, type ColKind } from '../lib/ops'
+import { NOT_IN_DB } from '../constants/masters'
 
 // ---- Toolbar -----------------------------------------------------------
 export function SectionToolbar({
@@ -190,6 +191,7 @@ export function exportRows<T>(name: string, ext: 'csv' | 'xls', cols: [string, k
 // ---- Data grid ---------------------------------------------------------
 export function Cell({ kind, v }: { kind: ColKind; v: unknown }) {
   if (v === '' || v === null || v === undefined) return <span className="text-ink-400">—</span>
+  if (v === NOT_IN_DB) return <span className="whitespace-nowrap text-[12px] text-ink-400">{NOT_IN_DB}</span>
   switch (kind) {
     case 'mono': return <span className="font-mono text-[12.5px]">{String(v)}</span>
     case 'date': return <span className="tnum text-[12.5px]">{fmtDate(String(v))}</span>
@@ -202,11 +204,15 @@ export function Cell({ kind, v }: { kind: ColKind; v: unknown }) {
 }
 
 export function DataGrid<T>({
-  cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass,
+  cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass, groups, editable,
 }: {
   cols: [string, keyof T, ColKind][]; rows: T[]; rowKey: (r: T) => string; sticky?: number
   onRowClick?: (r: T) => void; rowMenu?: (r: T) => { label: string; onClick: () => void }[]; pageSize?: number
   trailing?: { label: string; render: (r: T) => ReactNode }[]; rowClass?: (r: T) => string
+  /** A header row above the columns: each group spans `span` columns in order; `edit` = tinted as editable. */
+  groups?: { label: string; span: number; edit?: boolean }[]
+  /** Columns the person can edit: header and cells tinted with the primary colour. */
+  editable?: ReadonlySet<keyof T>
 }) {
   const [page, setPage] = useState(0)
   const [menu, setMenu] = useState<string | null>(null)
@@ -219,12 +225,23 @@ export function DataGrid<T>({
       <div className="overflow-x-auto">
         <table className="w-full border-separate border-spacing-0 text-[13px]">
           <thead>
+            {groups && (
+              <tr>
+                {groups.map((g, i) => (
+                  <th key={`${g.label}-${i}`} colSpan={g.span}
+                    className={`whitespace-nowrap border-b border-l border-line px-3 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide first:border-l-0 ${g.edit ? 'bg-primary-soft text-primary' : 'bg-alt text-ink-600'}`}>
+                    {g.label}
+                  </th>
+                ))}
+                {(trailing?.length ?? 0) + (rowMenu ? 1 : 0) > 0 && <th colSpan={(trailing?.length ?? 0) + (rowMenu ? 1 : 0)} className="border-b border-l border-line bg-alt" />}
+              </tr>
+            )}
             <tr>
-              {cols.map(([label], i) => (
+              {cols.map(([label, key], i) => (
                 <th
                   key={label}
                   style={i < sticky ? { left: i * stickyW, minWidth: stickyW } : undefined}
-                  className={`sticky top-0 whitespace-nowrap border-b border-line bg-alt px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600 ${i < sticky ? 'z-20' : 'z-10'} ${i === sticky - 1 ? 'border-r' : ''}`}
+                  className={`sticky top-0 whitespace-nowrap border-b border-line px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide ${editable?.has(key) ? 'bg-primary-soft text-primary' : 'bg-alt text-ink-600'} ${i < sticky ? 'z-20' : 'z-10'} ${i === sticky - 1 ? 'border-r' : ''}`}
                 >
                   {label}
                 </th>
@@ -245,7 +262,7 @@ export function DataGrid<T>({
                     <td
                       key={label}
                       style={i < sticky ? { left: i * stickyW, minWidth: stickyW } : undefined}
-                      className={`whitespace-nowrap border-b border-line px-3 py-2.5 group-hover:bg-canvas ${i < sticky ? 'sticky z-[5] bg-surface' : ''} ${i === sticky - 1 ? 'border-r' : ''}`}
+                      className={`whitespace-nowrap border-b border-line px-3 py-2.5 group-hover:bg-canvas ${i < sticky ? 'sticky z-[5] bg-surface' : editable?.has(key) ? 'bg-primary-soft/40' : ''} ${i === sticky - 1 ? 'border-r' : ''}`}
                     >
                       <Cell kind={kind} v={r[key]} />
                     </td>

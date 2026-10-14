@@ -175,8 +175,8 @@ export function Td({ children, right = false, mono = false, className = '' }: { 
 
 // ---- Buttons ----------------------------------------------------------
 export function Button({
-  children, variant = 'default', onClick, icon,
-}: { children: ReactNode; variant?: 'default' | 'primary' | 'ghost'; onClick?: () => void; icon?: ReactNode }) {
+  children, variant = 'default', onClick, icon, disabled,
+}: { children: ReactNode; variant?: 'default' | 'primary' | 'ghost'; onClick?: () => void; icon?: ReactNode; disabled?: boolean }) {
   const v =
     variant === 'primary'
       ? 'bg-primary text-white hover:opacity-90 border-transparent'
@@ -186,7 +186,8 @@ export function Button({
   return (
     <button
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${v}`}
+      disabled={disabled}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${v}`}
     >
       {icon}
       {children}

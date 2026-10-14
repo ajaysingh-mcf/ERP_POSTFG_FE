@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import type { ComponentType } from 'react'
-import { BadgeCheck, ChevronDown, ChevronsLeft, ChevronsRight, Database, LineChart, Search, Truck } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import type { ComponentType, ReactNode } from 'react'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
+import { BadgeCheck, ChevronDown, ChevronsLeft, ChevronsRight, Database, LineChart, LogOut, Search, Truck } from 'lucide-react'
 import Analytics from './pages/Analytics'
 import Masters from './pages/Masters'
 import Approvals from './pages/Approvals'
@@ -11,47 +12,63 @@ import ShortSkus from './pages/ops/ShortSkus'
 import InventoryCalc from './pages/dp/InventoryCalc'
 import DrrAging from './pages/dp/DrrAging'
 import DPAnalytics from './pages/dp/DPAnalytics'
-import { MASTER_TABS } from './lib/data'
 import { APPROVALS, CHANNEL_PRIORITY_DEFAULT } from './lib/ops'
+import { useAuth, type User } from './auth/AuthContext'
+import { FullPageMessage } from './auth/RequireAuth'
+import { ACCESS, UI_TEXT } from './constants/auth'
+import { DummyDataStrip } from './components/DummyData'
+import { HOME_PATH, MASTER_TAB_BY_PATH, NAV_GROUPS, PATHS, isDummyPage, type NavGroup } from './constants/pages'
 
-type Module = 'masters' | 'ops' | 'dp' | 'approvals'
-type Route = { module: Module; section: string }
-
-const GROUPS: { key: Module; label: string; icon: ComponentType<{ className?: string }>; items: string[] }[] = [
-  { key: 'masters', label: 'Masters', icon: Database, items: MASTER_TABS },
-  { key: 'ops', label: 'B2B/B2C Operations', icon: Truck, items: ['PO Overview', 'PO Processing & Review', 'PO Working', 'SKUs Short', 'Analytics'] },
-  { key: 'dp', label: 'Demand Planning', icon: LineChart, items: ['Inventory Calculation', 'DRR & Aging', 'Analytics'] },
-  { key: 'approvals', label: 'Approvals', icon: BadgeCheck, items: [] },
-]
+const GROUP_ICONS: Record<string, ComponentType<{ className?: string }>> = {
+  [PATHS.MASTERS]: Database,
+  [PATHS.OPERATIONS]: Truck,
+  [PATHS.PLANNING]: LineChart,
+  [PATHS.APPROVALS]: BadgeCheck,
+}
 
 const BRANDS = ['All', 'mCaffeine', 'Hyphen'] as const
 const pending = APPROVALS.filter((a) => a.status === 'Pending').length
 
+/** The group a path belongs to, and its item (groups with children). */
+const findRoute = (pathname: string) => {
+  for (const g of NAV_GROUPS) {
+    if (pathname === g.key || pathname.startsWith(`${g.key}/`)) return { group: g, item: g.items.find((it) => it.path === pathname) }
+  }
+  return null
+}
+
 export default function App() {
-  const [route, setRoute] = useState<Route>({ module: 'ops', section: 'PO Overview' })
-  const [open, setOpen] = useState<Record<Module, boolean>>({ masters: false, ops: true, dp: true, approvals: false })
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const auth = useAuth()
+  const [open, setOpen] = useState<Record<string, boolean>>({ [PATHS.MASTERS]: false, [PATHS.OPERATIONS]: true, [PATHS.PLANNING]: true, [PATHS.APPROVALS]: false })
   const [collapsed, setCollapsed] = useState(false)
   const [prio, setPrio] = useState<Record<string, number>>(CHANNEL_PRIORITY_DEFAULT)
   const [brand, setBrand] = useState<(typeof BRANDS)[number]>('All')
-  const go = (module: Module, section = '') => setRoute({ module, section })
 
-  const page = (() => {
-    const { module, section } = route
-    if (module === 'masters') return <Masters tab={section || MASTER_TABS[0]} />
-    if (module === 'approvals') return <Approvals />
-    if (module === 'ops') {
-      if (section === 'PO Processing & Review') return <POProcessing />
-      if (section === 'PO Working') return <POWorking prio={prio} setPrio={setPrio} />
-      if (section === 'SKUs Short') return <ShortSkus priority={prio} />
-      if (section === 'Analytics') return <Analytics go={() => go('dp', 'Inventory Calculation')} />
-      return <POOverview />
-    }
-    if (section === 'DRR & Aging') return <DrrAging />
-    if (section === 'Analytics') return <DPAnalytics />
-    return <InventoryCalc />
-  })()
+  // Sidebar shows only what the user may see: access "none" hides a page, and a group with nothing visible hides too.
+  const canSee = (path: string) => auth.accessFor(path) !== ACCESS.NONE
+  const groups: NavGroup[] = NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((it) => canSee(it.path)) })).filter((g) =>
+    g.items.length > 0 || (NAV_GROUPS.find((n) => n.key === g.key)!.items.length === 0 && canSee(g.key)),
+  )
+  const firstPath = (g: NavGroup) => g.items[0]?.path ?? g.key
 
-  const groupLabel = GROUPS.find((g) => g.key === route.module)!.label
+  const current = findRoute(pathname)
+  const viewOnly = current !== null && auth.accessFor(current.item?.path ?? current.group.key) === ACCESS.VIEWER
+  const dummy = current !== null && isDummyPage(current.item?.path ?? current.group.key)
+
+  const pages: [string, ReactNode][] = [
+    ...Object.entries(MASTER_TAB_BY_PATH).map(([path, tab]): [string, ReactNode] => [path, <Masters tab={tab} />]),
+    [PATHS.PO_OVERVIEW, <POOverview />],
+    [PATHS.PO_REVIEW, <POProcessing />],
+    [PATHS.PO_WORKING, <POWorking prio={prio} setPrio={setPrio} />],
+    [PATHS.SKUS_SHORT, <ShortSkus priority={prio} />],
+    [PATHS.OPS_ANALYTICS, <Analytics go={() => navigate(PATHS.INVENTORY)} />],
+    [PATHS.INVENTORY, <InventoryCalc />],
+    [PATHS.DRR_AGING, <DrrAging />],
+    [PATHS.PLANNING_ANALYTICS, <DPAnalytics />],
+    [PATHS.APPROVALS, <Approvals />],
+  ]
 
   return (
     <div className={`grid h-full grid-cols-1 ${collapsed ? 'md:grid-cols-[68px_1fr]' : 'md:grid-cols-[248px_1fr]'}`}>
@@ -71,15 +88,15 @@ export default function App() {
         </div>
 
         <nav className="mt-1 min-h-0 flex-1 overflow-y-auto px-2.5 pb-4">
-          {GROUPS.map((g) => {
-            const activeGroup = route.module === g.key
-            const Icon = g.icon
+          {groups.map((g) => {
+            const activeGroup = current?.group.key === g.key
+            const Icon = GROUP_ICONS[g.key]
             const leaf = g.items.length === 0
             return (
               <div key={g.key} className="mb-0.5">
                 <button
                   onClick={() => {
-                    if (leaf || collapsed) go(g.key, g.items[0] ?? '')
+                    if (leaf || collapsed) navigate(firstPath(g))
                     else setOpen({ ...open, [g.key]: !open[g.key] })
                   }}
                   title={g.label}
@@ -88,22 +105,23 @@ export default function App() {
                   }`}
                 >
                   <Icon className="size-4 shrink-0" />
-                  {!collapsed && <span className="flex-1 text-left">{g.label}</span>}
+                  {!collapsed && <span className="flex-1 text-left">{g.label}{leaf && isDummyPage(g.key) && <DummyDot />}</span>}
                   {!collapsed && leaf && pending > 0 && <span className={`tnum rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${activeGroup ? 'bg-white/20 text-white' : 'bg-crit-soft text-crit'}`}>{pending}</span>}
                   {!collapsed && !leaf && <ChevronDown className={`size-3.5 text-ink-400 transition-transform ${open[g.key] ? '' : '-rotate-90'}`} />}
                 </button>
                 {!collapsed && !leaf && open[g.key] && (
                   <div className="my-1 ml-[21px] border-l border-line pl-3">
                     {g.items.map((it) => {
-                      const on = activeGroup && route.section === it
+                      const on = pathname === it.path
                       return (
                         <button
-                          key={it}
-                          onClick={() => go(g.key, it)}
+                          key={it.path}
+                          onClick={() => navigate(it.path)}
                           className={`relative block w-full truncate rounded-md px-2.5 py-1.5 text-left text-[13px] transition-colors ${on ? 'bg-primary-soft font-medium text-primary' : 'text-ink-600 hover:bg-alt hover:text-ink-900'}`}
                         >
                           {on && <span className="absolute -left-[13px] top-1.5 bottom-1.5 w-0.5 rounded-full bg-primary" />}
-                          {it}
+                          {it.label}
+                          {isDummyPage(it.path) && <DummyDot />}
                         </button>
                       )
                     })}
@@ -129,20 +147,19 @@ export default function App() {
       {/* Main */}
       <div className="flex min-h-0 min-w-0 flex-col">
         <header className="flex items-center gap-3 border-b border-line bg-surface px-5 py-3">
-          <select
-            value={`${route.module}|${route.section}`}
-            onChange={(e) => { const [m, s] = e.target.value.split('|'); go(m as Module, s) }}
-            className="rounded-md border border-line px-2 py-1.5 text-xs md:hidden"
-          >
-            {GROUPS.map((g) => g.items.length ? (
-              <optgroup key={g.key} label={g.label}>{g.items.map((it) => <option key={it} value={`${g.key}|${it}`}>{it}</option>)}</optgroup>
-            ) : <option key={g.key} value={`${g.key}|`}>{g.label}</option>)}
+          <select value={pathname} onChange={(e) => navigate(e.target.value)} className="rounded-md border border-line px-2 py-1.5 text-xs md:hidden">
+            {groups.map((g) => g.items.length ? (
+              <optgroup key={g.key} label={g.label}>{g.items.map((it) => <option key={it.path} value={it.path}>{it.label}</option>)}</optgroup>
+            ) : <option key={g.key} value={g.key}>{g.label}</option>)}
           </select>
 
-          <div className="hidden items-center gap-1.5 text-[12px] text-ink-400 md:flex">
-            <span>{groupLabel}</span>
-            {route.section && <><span>/</span><span className="font-medium text-ink-900">{route.section}</span></>}
-          </div>
+          {current && (
+            <div className="hidden items-center gap-1.5 text-[12px] text-ink-400 md:flex">
+              <span>{current.group.label}</span>
+              {current.item && <><span>/</span><span className="font-medium text-ink-900">{current.item.label}</span></>}
+              {viewOnly && <span className="ml-2 rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-semibold text-warn">{UI_TEXT.VIEW_ONLY}</span>}
+            </div>
+          )}
 
           <label className="relative ml-4 hidden lg:block">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-400" />
@@ -156,14 +173,68 @@ export default function App() {
                 <button key={b} onClick={() => setBrand(b)} className={`rounded px-2 py-1 font-semibold transition-colors ${brand === b ? 'bg-primary text-white' : 'text-ink-600 hover:text-ink-900'}`}>{b}</button>
               ))}
             </div>
-            <div className="flex size-8 items-center justify-center rounded-full bg-primary-soft text-[12px] font-semibold text-primary">AK</div>
+            {auth.status === 'signedIn' && <UserMenu user={auth.user} onLogout={auth.logout} />}
           </div>
         </header>
 
-        <main className="min-w-0 flex-1 overflow-y-auto p-5 lg:p-6">
-          <div key={`${route.module}-${route.section}`} className="mx-auto max-w-[1440px]">{page}</div>
+        <main className={`min-w-0 flex-1 overflow-y-auto p-5 lg:p-6 ${dummy ? 'dummy-data bg-canvas' : ''}`}>
+          <div key={pathname} className="mx-auto max-w-[1440px]">
+            {dummy && <DummyDataStrip />}
+            <Routes>
+              <Route index element={<Navigate to={HOME_PATH} replace />} />
+              {NAV_GROUPS.filter((g) => g.items.length > 0).map((g) => (
+                <Route key={g.key} path={g.key} element={<Navigate to={g.items[0].path} replace />} />
+              ))}
+              {pages.map(([path, element]) => (
+                <Route key={path} path={path} element={canSee(path) ? element : <FullPageMessage text={UI_TEXT.NO_ACCESS} />} />
+              ))}
+              <Route path="*" element={<FullPageMessage text={UI_TEXT.NOT_FOUND} />} />
+            </Routes>
+          </div>
         </main>
       </div>
     </div>
   )
+}
+
+function UserMenu({ user, onLogout }: { user: User; onLogout: () => Promise<void> }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const initials =
+    user.name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || user.email[0]!.toUpperCase()
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen((o) => !o)} title={user.email} className="flex size-8 items-center justify-center rounded-full bg-primary-soft text-[12px] font-semibold text-primary">
+        {initials}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-10 z-50 w-64 rounded-[var(--radius-card)] border border-line bg-surface p-3 shadow-lg">
+          <div className="text-[13px] font-medium text-ink-900">{user.name}</div>
+          <div className="truncate text-[12px] text-ink-600">{user.email}</div>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {user.roles.map((r) => (
+              <span key={r} className="rounded-full bg-alt px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-600">{r}</span>
+            ))}
+          </div>
+          <button onClick={onLogout} className="mt-3 flex w-full items-center gap-2 rounded-md border border-line px-3 py-1.5 text-[12px] font-semibold text-ink-900 hover:bg-alt">
+            <LogOut className="size-3.5" /> Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DummyDot() {
+  return <span title="Dummy data (dev)" className="ml-1.5 inline-block size-1.5 rounded-full bg-amber-400 align-middle" />
 }

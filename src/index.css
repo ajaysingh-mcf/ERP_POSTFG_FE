@@ -56,6 +56,15 @@ body {
   font-family: var(--font-serif);
 }
 
+/* Dev only: a page still on sample data. Re-tints the surface tokens so every card, table and drawer inside turns
+   amber; pages served by the API keep the normal Figma colours. */
+.dummy-data {
+  --color-canvas: #fff7ed;
+  --color-surface: #fffbeb;
+  --color-alt: #fef3c7;
+  --color-line: #fcd34d;
+}
+
 /* Tabular numerals everywhere data appears */
 .tnum {
   font-variant-numeric: tabular-nums;
