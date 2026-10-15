@@ -105,6 +105,8 @@ export const APPROVAL_TABS: { key: ApprovalStatus; label: string; danger?: boole
 ]
 /** Rows per load of an Approvals tab. */
 export const APPROVALS_PAGE_SIZE = 200
+/** The sidebar's pending-approvals badge re-reads its count this often (and at once when the Approvals page changes). */
+export const APPROVALS_BADGE_REFRESH_MS = 60_000
 
 /** Names of the line fields a reviewer can change (po_review_submissions.fixes). */
 export const FIX_FIELD_LABEL: Record<string, string> = { pepCode: 'Internal SKU', qty: 'Qty', mrp: 'MRP', rate: 'Rate' }

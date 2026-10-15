@@ -76,7 +76,7 @@ export type FilterValues = Record<string, string | string[]>
 
 export const countActive = (v: FilterValues) => Object.values(v).filter((x) => (Array.isArray(x) ? x.length : x)).length
 
-function MultiSelect({ value, onChange, options, placeholder }: { value: string[]; onChange: (v: string[]) => void; options: readonly string[]; placeholder: string }) {
+export function MultiSelect({ value, onChange, options, placeholder }: { value: string[]; onChange: (v: string[]) => void; options: readonly string[]; placeholder: string }) {
   // Our popover: opens / closes with the same animation as the other pickers (components/pickers.tsx).
   const { open, leaving, ref, toggle } = usePopover()
   return (
