@@ -104,8 +104,8 @@ const DRAWER_MS = 250
  * onClose. `footer` may be a function getting that same animated close, for its own Close / Cancel buttons.
  */
 export function Drawer({
-  open, onClose, title, sub, children, footer,
-}: { open: boolean; onClose: () => void; title: ReactNode; sub?: ReactNode; children: ReactNode; footer?: ReactNode | ((close: () => void) => ReactNode) }) {
+  open, onClose, title, sub, children, footer, wide = false,
+}: { open: boolean; onClose: () => void; title: ReactNode; sub?: ReactNode; children: ReactNode; footer?: ReactNode | ((close: () => void) => ReactNode); wide?: boolean }) {
   const [leaving, setLeaving] = useState(false)
   const close = useCallback(() => {
     setLeaving(true)
@@ -120,7 +120,7 @@ export function Drawer({
   const foot = typeof footer === 'function' ? footer(close) : footer
   return (
     <div className={`fixed inset-0 z-50 flex justify-end bg-ink-900/40 backdrop-blur-[1px] ${leaving ? 'pf-backdrop-out' : 'pf-backdrop-in'}`} onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div className={`flex h-full w-full max-w-[540px] flex-col border-l border-line bg-surface shadow-2xl ${leaving ? 'pf-drawer-out' : 'pf-drawer-in'}`}>
+      <div className={`flex h-full w-full ${wide ? 'max-w-[880px]' : 'max-w-[540px]'} flex-col border-l border-line bg-surface shadow-2xl ${leaving ? 'pf-drawer-out' : 'pf-drawer-in'}`}>
         <div className="flex items-start justify-between border-b border-line px-5 py-4">
           <div className="min-w-0">
             <div className="text-[15px] font-semibold text-ink-900">{title}</div>

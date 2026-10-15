@@ -153,3 +153,7 @@ input, textarea, select {
   button:active, [role='button']:active, .pf-press:active { transform: none; }
 }
 
+/* "Copied" chip on a clicked table cell: pops in, then fades out (COPIED_MS = 1.2 s). */
+@keyframes pf-copy-chip { 0% { opacity: 0; transform: translateY(-50%) scale(0.9); } 12% { opacity: 1; transform: translateY(-50%) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; } }
+.pf-copy-chip { animation: pf-copy-chip 1.2s ease-out forwards; }
+

@@ -34,6 +34,7 @@ export const PATHS = {
  */
 export const LIVE_PAGES: ReadonlySet<string> = new Set<string>([
   PATHS.PO_REVIEW, // Processed tab live; In Review and Manual Upload still marked inside the page
+  PATHS.APPROVALS, // GET /approvals/po-reviews (PO reviews only; other approval types not built, hidden)
   PATHS.PEP_SKUS, // GET /masters/pep-skus; fields with no DB column show NOT_IN_DB
   PATHS.CHANNEL_SKUS, // GET /masters/channel-skus; status has no DB column (NOT_IN_DB)
   PATHS.PO_OVERVIEW, // GET /po-overview/shipments + /lines + /filter-options (our POs)

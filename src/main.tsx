@@ -9,6 +9,10 @@ import { RequireAuth } from './auth/RequireAuth'
 import { PATHS } from './constants/pages'
 import { QUERY_CACHE } from './constants/ui'
 import './index.css'
+import { blockNumberStepping } from './lib/numberInputs'
+
+// Number boxes change only by typing (no wheel / arrow-key stepping).
+blockNumberStepping()
 
 // The frontend data cache (TanStack Query): pages show what they loaded before at once and refresh it quietly.
 const queryClient = new QueryClient({

@@ -9,7 +9,8 @@ import { getColumns, getFilterOptions, listLines, listShipments, type ColumnDef,
 import { COLUMN_GROUP_LABEL, FACILITY_SCOPE_NOTE, NOT_ASSIGNED_DATES, OVERVIEW_TAB, PO_OVERVIEW_PAGE_SIZE, SEARCH_DELAY_MS } from '../../constants/poOverview'
 import { TABLE_HEIGHT } from '../../constants/ui'
 import { Reveal } from '../../components/shell'
-import { useLiveShipments, type LiveMode } from '../../lib/liveShipments'
+import { useLiveShipments } from '../../lib/liveShipments'
+import { LiveDot } from '../../components/LiveDot'
 import { ShipmentDrawer } from './ShipmentDrawer'
 import { HistoryDrawer } from './ShipmentHistory'
 import { NOT_AVAILABLE_YET } from '../../constants/masters'
@@ -214,11 +215,6 @@ function FacilityNote({ mine, filters, setFilters, editHere }: { mine: string[];
   )
 }
 
-/** Live updates state: live (SSE), polling every 60 s (fallback, switches back by itself), connecting. */
-function LiveDot({ mode }: { mode: LiveMode }) {
-  const look = mode === 'live' ? ['bg-ok', 'Live'] : mode === 'polling' ? ['bg-warn', 'Updating every 60 s'] : ['bg-ink-400', 'Connecting…']
-  return <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-600"><span className={`size-2 rounded-full ${look[0]}`} />{look[1]}</span>
-}
 
 /** Widths (px) of the fixed key columns: PO Number, Channel, Location, Final Status. */
 const KEY_FIXED_WIDTHS = [150, 116, 160, 140]
@@ -281,7 +277,7 @@ function ShipmentTab({ options, columns, onTotal, tableHeight, flash }: { option
       {/* key = the team tab: the grid fades in with the new columns on every team switch */}
       <div key={tab} className="pf-tab-in">
       <DataGrid
-        cols={cols} rows={s.rows} rowKey={(r) => String(r.uid)} sticky={fixedCols} stickyWidths={KEY_FIXED_WIDTHS} openOn="dblclick" onRowClick={setSel} groups={groups} editable={editable} rowEditable={(r) => r.canEdit === true} onRowHistory={setHistoryOf} rowClass={(r) => (flash[String(r.uid)] ? 'pf-row-flash' : '')} maxHeight={tableHeight} pageSize={50}
+        cols={cols} rows={s.rows} rowKey={(r) => String(r.uid)} sticky={fixedCols} stickyWidths={KEY_FIXED_WIDTHS} onRowClick={setSel} groups={groups} editable={editable} rowEditable={(r) => r.canEdit === true} onRowHistory={setHistoryOf} rowClass={(r) => (flash[String(r.uid)] ? 'pf-row-flash' : '')} maxHeight={tableHeight} pageSize={50}
         rowMenu={(r) => [{ label: 'View details', onClick: () => setSel(r) }, { label: 'History', onClick: () => setHistoryOf(r) }]}
       />
       </div>
@@ -313,7 +309,7 @@ function LinesTab({ options, columns, onTotal, tableHeight }: { options: FilterO
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={(f) => { s.setFilters(f); s.setOpen(false) }} onClose={() => s.setOpen(false)} /></Reveal>
       <ListStatus s={s} entity="PO lines" />
       <DataGrid
-        cols={PO_LINE_COLS} rows={s.rows} rowKey={(r) => `${r.shipmentUid}-${r.srNo}`} sticky={LINE_FIXED_COLS} stickyWidths={LINE_FIXED_WIDTHS} maxHeight={tableHeight} pageSize={50} openOn="dblclick" onRowClick={setSel}
+        cols={PO_LINE_COLS} rows={s.rows} rowKey={(r) => `${r.shipmentUid}-${r.srNo}`} sticky={LINE_FIXED_COLS} stickyWidths={LINE_FIXED_WIDTHS} maxHeight={tableHeight} pageSize={50} onRowClick={setSel}
         trailing={[{ label: 'Status', render: (r) => <Cell kind="status" v={r.status} /> }]}
         rowMenu={(r) => [{ label: 'View details', onClick: () => setSel(r) }]}
       />

@@ -69,9 +69,9 @@ export const PDF_VIEWER = { ZOOM_STEPS: [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4],
 
 /** Review panel texts. */
 export const REVIEW_TEXT = {
-  INTRO: 'Check the parsed fields against the original, correct anything wrong, then create the PO.',
-  VIEW_ONLY: 'View only: ask an admin for editor access to create or reject POs.',
-  CREATE: 'Create PO & mark processed',
+  INTRO: 'Check the parsed fields against the original, resolve every issue and fill every field, then submit it for approval.',
+  VIEW_ONLY: 'View only: ask an admin for editor access to submit or reject POs.',
+  SUBMIT: 'Submit for approval',
   REJECT: 'Reject PO',
   REJECT_PROMPT: 'Why is this PO rejected? (required, kept with the PO)',
   REMARK: 'Remark (optional, kept with the PO)',
@@ -80,9 +80,59 @@ export const REVIEW_TEXT = {
   NO_PREVIEW: 'This file type cannot be shown here. Download it to view it.',
   PDF_LOADING: 'Loading the PO file…',
   PDF_FAILED: 'Could not show the PO file here. Open it in a new tab or download it.',
-  CREATED: (po: string, code: string) => `PO ${po} created: sale order ${code}, Uniware CSV saved in S3.`,
+  SUBMITTED: (po: string) => `PO ${po} sent for approval: it is now on the Approvals page.`,
+  RETURNED: (at: string, reason: string) => `Sent back to review by the system on ${at}: ${reason}`,
+  RESOLVED: 'Resolved',
+  GONE: 'Someone else has just submitted or rejected this PO: it is no longer in review. Close this panel.',
+  TO_RESOLVE: 'To resolve',
   REJECTED: (po: string) => `PO ${po} rejected.`,
 } as const
 
 /** Issue types that can only be rejected (never corrected or accepted). */
 export const REJECT_ONLY_ISSUES = ['DUPLICATE_PO']
+
+/* ---- Approvals page: PO reviews waiting for an approver (2026-10-15) ---- */
+
+export const APPROVALS_ENDPOINT = '/approvals/po-reviews'
+
+/** po_review_submissions.status shown as the page's tabs. */
+export const APPROVAL_STATUS = { PENDING: 'pending', APPROVED: 'approved', REJECTED: 'rejected' } as const
+export type ApprovalStatus = (typeof APPROVAL_STATUS)[keyof typeof APPROVAL_STATUS]
+export const APPROVAL_TABS: { key: ApprovalStatus; label: string; danger?: boolean }[] = [
+  { key: APPROVAL_STATUS.PENDING, label: 'Pending', danger: true },
+  { key: APPROVAL_STATUS.APPROVED, label: 'Approved' },
+  { key: APPROVAL_STATUS.REJECTED, label: 'Rejected' },
+]
+/** Rows per load of an Approvals tab. */
+export const APPROVALS_PAGE_SIZE = 200
+
+/** Names of the line fields a reviewer can change (po_review_submissions.fixes). */
+export const FIX_FIELD_LABEL: Record<string, string> = { pepCode: 'Internal SKU', qty: 'Qty', mrp: 'MRP', rate: 'Rate' }
+
+/** po_review_submissions.status when the system sent a PO back to In Review (it no longer passed at approval). */
+export const SUBMISSION_RETURNED = 'returned'
+
+export const APPROVAL_ERROR = {
+  /** The PO no longer passed the checks when approved: it went back to In Review by itself. */
+  RETURNED: 'REVIEW_RETURNED',
+  NOT_PENDING: 'SUBMISSION_NOT_PENDING',
+} as const
+
+export const APPROVAL_TEXT = {
+  SUB: 'PO reviews submitted by the reviewers wait here for an approver. Approving creates the PO, the sale order and the Uniware CSV.',
+  APPROVE: 'Approve & create PO',
+  REJECT: 'Reject',
+  REJECT_PROMPT: 'Why is this PO rejected? (required)',
+  APPROVE_REMARK: 'Note (optional)',
+  APPROVED: (po: string, code: string) => `PO ${po} approved: sale order ${code}, Uniware CSV saved in S3.`,
+  REJECTED: (po: string) => `PO ${po} rejected.`,
+  VIEW_ONLY: 'Only admins and developers can approve or reject.',
+} as const
+
+
+/** Remarks are stored as varchar 500 (POST_FG PO_REVIEW_REMARK_MAX). */
+export const PO_REVIEW_REMARK_MAX = 500
+
+/** Live PO Review + Approvals (POST_FG REVIEW_LIVE): SSE at <base>/events, version for polling at <base>/live-state. */
+export const REVIEW_LIVE = { EVENTS: '/events', STATE: '/live-state', EVENT_CHANGE: 'review', PO_REVIEW_BASE: '/po-review', APPROVALS_BASE: '/approvals' } as const
+

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, FileSpreadsheet, FileText, FileUp, Link2, Webhook, Zap, Mail } from 'lucide-react'
 import { Badge, PageTitle, SubTabs } from '../../components/ui'
 import { DataGrid, FilterPanel, SectionToolbar, exportRows, inputCls, useSection, type FilterDef } from '../../components/kit'
@@ -8,7 +8,9 @@ import { InReview } from './POReview'
 import { DummySection } from '../../components/DummyData'
 import { listPoReview, type PoReviewItem } from '../../api/poReview'
 import { ApiError } from '../../api/client'
-import { PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, PROCESSED_DEFAULT_DAYS, SOURCE_LABELS } from '../../constants/poReview'
+import { PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, PROCESSED_DEFAULT_DAYS, REVIEW_LIVE, SOURCE_LABELS } from '../../constants/poReview'
+import { useLiveReview } from '../../lib/liveReview'
+import { LiveDot } from '../../components/LiveDot'
 
 type Tab = 'processed' | 'review' | 'manual'
 const SRC_ICON = { API: Zap, Webhook: Webhook, Email: Mail, Manual: FileUp } as const
@@ -17,16 +19,19 @@ export default function POProcessing() {
   const [tab, setTab] = useState<Tab>('processed')
   const [processedCount, setProcessedCount] = useState<number | undefined>()
   const [reviewCount, setReviewCount] = useState<number | undefined>()
+  // Live (2026-10-15): when anyone submits, approves, rejects, or a new PO arrives, both lists reload quietly.
+  const [liveTick, setLiveTick] = useState(0)
+  const live = useLiveReview(REVIEW_LIVE.PO_REVIEW_BASE, useCallback(() => setLiveTick((n) => n + 1), []))
   return (
     <div className="space-y-5">
-      <PageTitle title="PO Processing & Review" sub="Ingest from channel APIs, webhooks and email · resolve parser errors · upload what can't be automated" />
+      <PageTitle title="PO Processing & Review" sub="Ingest from channel APIs, webhooks and email · resolve parser errors · upload what can't be automated" right={<LiveDot mode={live} />} />
       <SubTabs value={tab} onChange={setTab} tabs={[
         { key: 'processed', label: 'Processed', count: processedCount },
         { key: 'review', label: 'In Review', count: reviewCount, danger: !!reviewCount },
         { key: 'manual', label: 'Manual Upload' },
       ]} />
-      {tab === 'processed' && <Processed onCount={setProcessedCount} />}
-      {tab === 'review' && <InReview srcIcon={SRC_ICON} onCount={setReviewCount} />}
+      {tab === 'processed' && <Processed onCount={setProcessedCount} liveTick={liveTick} />}
+      {tab === 'review' && <InReview srcIcon={SRC_ICON} onCount={setReviewCount} liveTick={liveTick} />}
       {tab === 'manual' && <DummySection what="Manual Upload"><Manual /></DummySection>}
     </div>
   )
@@ -51,7 +56,7 @@ const toRow = (r: PoReviewItem): ProcessedRow => ({
 
 const distinct = (rows: ProcessedRow[], k: keyof ProcessedRow) => [...new Set(rows.map((r) => String(r[k] ?? '')).filter(Boolean))].sort()
 
-function Processed({ onCount }: { onCount: (n: number) => void }) {
+function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTick: number }) {
   const defaultFrom = daysBefore(PROCESSED_DEFAULT_DAYS - 1)
   const today = istDay(new Date())
   const [from, setFrom] = useState(defaultFrom)
@@ -59,11 +64,14 @@ function Processed({ onCount }: { onCount: (n: number) => void }) {
   const [rows, setRows] = useState<ProcessedRow[]>([])
   const [state, setState] = useState<{ loading: boolean; error?: string }>({ loading: true })
   const [reload, setReload] = useState(0)
+  // A live reload keeps the rows on screen (no "Loading…" flash); a new date range shows the loader.
+  const range = useRef('')
 
   useEffect(() => {
     if (!from || !to || from > to) return
     const ctrl = new AbortController()
-    setState({ loading: true })
+    if (range.current !== `${from}|${to}`) setState({ loading: true })
+    range.current = `${from}|${to}`
     listPoReview({ status: PO_STATUS.COMPLETED, from, to, pageSize: PO_REVIEW_MAX_PAGE_SIZE }, ctrl.signal)
       .then((items) => {
         const next = items.map(toRow)
@@ -76,7 +84,7 @@ function Processed({ onCount }: { onCount: (n: number) => void }) {
         setState({ loading: false, error: e instanceof ApiError ? e.message : String(e) })
       })
     return () => ctrl.abort()
-  }, [from, to, reload, onCount])
+  }, [from, to, reload, liveTick, onCount])
 
   const s = useSection<ProcessedRow>(rows, ['poNumber', 'id', 'file', 'saleOrder'])
   const defs: FilterDef[] = [

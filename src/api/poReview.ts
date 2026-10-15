@@ -113,6 +113,8 @@ export type PoReviewDetail = {
   warnings: { code: string; message: string }[]
   /** The channel's SKUs a line can be mapped to. */
   skuOptions: PoReviewSkuOption[]
+  /** The latest approval round of this PO (e.g. returned to In Review by the system, with the reason). */
+  lastSubmission: LastSubmission | null
   /** Short-lived download links (15 min); null when the file is not in S3. */
   files: {
     /** Opens in the browser tab. */
@@ -123,6 +125,17 @@ export type PoReviewDetail = {
     processedJson: string | null
     uniwareCsv: string | null
   }
+}
+
+export type LastSubmission = {
+  id: string
+  type: string
+  status: string
+  submittedBy: string | null
+  submittedAt: string
+  decidedBy: string | null
+  decidedAt: string | null
+  remark: string | null
 }
 
 export type PoReviewSkuOption = {
@@ -154,7 +167,10 @@ export async function getPoFile(uploadId: string, signal?: AbortSignal): Promise
   return res.arrayBuffer()
 }
 
-/* POST /po-review/:uploadId/resubmit: corrections + accepts -> validate again -> saved (sale order + Uniware CSV). */
+/*
+ * POST /po-review/:uploadId/submit (2026-10-15, replaces /resubmit): corrections + accepts -> validated again -> must
+ * pass completely -> pending_approval; an approver creates the PO on the Approvals page.
+ */
 
 export type LineCorrection = { lineNo: string; pepCode?: string; qty?: number; mrp?: number; rate?: number }
 
@@ -165,16 +181,16 @@ export type ResubmitBody = {
   remark?: string
 }
 
-export type ResubmitResult = { status: string; poUid: string; saleOrderCode: string; uniwareCsv: string; resolvedIssues: string[] }
+export type SubmitResult = { status: string; submissionId: string }
 
 /** details of a REVIEW_INCOMPLETE error: what is still failing after the corrections. */
 export type StillOpen = { openIssues: { type: string; field: string; lineNo: number | null; message: string }[] }
 
-export function resubmitPo(uploadId: string, body: ResubmitBody) {
-  return api<ResubmitResult>(`${one(uploadId)}/resubmit`, { method: 'POST', body: JSON.stringify(body) })
+export function submitPo(uploadId: string, body: ResubmitBody) {
+  return api<SubmitResult>(`${one(uploadId)}/submit`, { method: 'POST', body: JSON.stringify(body) })
 }
 
-/* POST /po-review/:uploadId/reject: the PO leaves the review list; nothing is saved. */
+/* POST /po-review/:uploadId/reject: the reviewer rejects directly; the PO leaves the list (who / why kept). */
 export function rejectPo(uploadId: string, remark: string) {
   return api<{ status: string; rejectedIssues: string[] }>(`${one(uploadId)}/reject`, { method: 'POST', body: JSON.stringify({ remark }) })
 }

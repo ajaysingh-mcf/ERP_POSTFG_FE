@@ -1,16 +1,16 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentType } from 'react'
 import { AlertTriangle, Check, Download, ExternalLink, FileText, Link2, Mail, X } from 'lucide-react'
 import { Badge, Button } from '../../components/ui'
 import { DataGrid, FilterPanel, SectionToolbar, applyFilters, exportRows, inputCls, useSection, type FilterDef } from '../../components/kit'
 import type { ColKind } from '../../lib/ops'
 import {
-  getPoFile, getPoReview, listPoReview, rejectPo, resubmitPo,
+  getPoFile, getPoReview, listPoReview, rejectPo, submitPo,
   type LineCorrection, type Num, type PoReviewDetail, type PoReviewIssue, type PoReviewItem, type PoReviewLine, type ResubmitBody, type StillOpen,
 } from '../../api/poReview'
 import { ApiError } from '../../api/client'
 import {
-  ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, PREVIEW_TYPES, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS,
+  ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, PREVIEW_TYPES, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED,
 } from '../../constants/poReview'
 import { ACCESS } from '../../constants/auth'
 import { PATHS } from '../../constants/pages'
@@ -21,7 +21,8 @@ import { SkuPicker } from './SkuPicker'
 /*
  * In Review: POs that failed validation (GET /po-review?status=needs_review), oldest first, and the review panel
  * (GET /po-review/:uploadId) laid out as the Figma design: the PO document on the left, the parsed PO on the right
- * with the reviewer's corrections, then Create PO (resubmit) or Reject. Editing needs editor access.
+ * with the reviewer's corrections, then Submit for approval (2026-10-15: only when every issue is resolved and every
+ * field filled; an approver creates the PO on the Approvals page) or Reject (directly). Editing needs editor access.
  */
 
 type ReviewRow = {
@@ -43,29 +44,32 @@ const distinct = (values: string[]) => [...new Set(values.filter(Boolean))].sort
 const label = (type: string) => ISSUE_LABELS[type] ?? type
 const box = 'rounded-[var(--radius)] border border-line bg-surface px-4 py-10 text-center text-[13px] text-ink-600'
 
-export function InReview({ srcIcon, onCount }: { srcIcon: Record<string, ComponentType<{ className?: string }>>; onCount: (n: number) => void }) {
+export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<string, ComponentType<{ className?: string }>>; onCount: (n: number) => void; liveTick?: number }) {
   const [rows, setRows] = useState<ReviewRow[]>([])
   const [state, setState] = useState<{ loading: boolean; error?: string }>({ loading: true })
   const [reload, setReload] = useState(0)
   const [sel, setSel] = useState<ReviewRow | null>(null)
   const [notice, setNotice] = useState<string>()
 
+  // Live reloads (liveTick) keep the rows on screen; only the first load shows "Loading…".
+  const loaded = useRef(false)
   useEffect(() => {
     const ctrl = new AbortController()
-    setState({ loading: true })
+    if (!loaded.current) setState({ loading: true })
     listPoReview({ status: PO_STATUS.NEEDS_REVIEW, pageSize: PO_REVIEW_MAX_PAGE_SIZE }, ctrl.signal)
       .then((items) => {
         const next = items.map(toRow)
         setRows(next)
         onCount(next.length)
         setState({ loading: false })
+        loaded.current = true
       })
       .catch((e: unknown) => {
         if (ctrl.signal.aborted) return
         setState({ loading: false, error: e instanceof ApiError ? e.message : String(e) })
       })
     return () => ctrl.abort()
-  }, [reload, onCount])
+  }, [reload, liveTick, onCount])
 
   // A row has several issue types, so the Issue filter is applied here; search and the other filters by the shared helper.
   const s = useSection<ReviewRow>(rows, ['poNumber', 'id', 'channel', 'file'])
@@ -121,7 +125,8 @@ export function InReview({ srcIcon, onCount }: { srcIcon: Record<string, Compone
             { label: '', render: () => <span className="text-[12px] font-semibold text-primary">Review →</span> },
           ]} />
       )}
-      {sel && <ReviewPanel uploadId={sel.id} poNumber={sel.poNumber} onClose={() => setSel(null)} onDone={done} onStale={() => setReload((n) => n + 1)} />}
+      {sel && <ReviewPanel uploadId={sel.id} poNumber={sel.poNumber} onClose={() => setSel(null)} onDone={done} onStale={() => setReload((n) => n + 1)}
+        gone={!state.loading && !state.error && !rows.some((r) => r.id === sel.id)} />}
     </div>
   )
 }
@@ -138,8 +143,10 @@ type LineEdit = { pep: string; qty: string; mrp: string; rate: string }
 const lineKey = (l: PoReviewLine) => String(l.lineNo)
 const startOf = (l: PoReviewLine): LineEdit => ({ pep: l.pepCode, qty: plain(l.qty), mrp: plain(l.poMrp), rate: plain(l.poUnitPrice) })
 
-function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale }: {
+function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale, gone = false }: {
   uploadId: string; poNumber: string; onClose: () => void; onDone: (message: string) => void; onStale: () => void
+  /** The live list no longer has this PO: someone else submitted or rejected it meanwhile. */
+  gone?: boolean
 }) {
   const { accessFor } = useAuth()
   const canEdit = accessFor(PATHS.PO_REVIEW) === ACCESS.EDITOR
@@ -183,7 +190,7 @@ function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale }: {
   const sku = (pep: string) => data?.skuOptions.find((o) => o.pepCode === pep)
 
   // An issue counts as handled when it is accepted, or the part it is about was corrected. The backend checks again on
-  // Create PO and answers with whatever is still open.
+  // Submit and answers with whatever is still open.
   const handled = (i: PoReviewIssue): boolean => {
     if (accepted.has(i.issueId)) return true
     if (REJECT_ONLY_ISSUES.includes(i.type)) return false
@@ -223,13 +230,22 @@ function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale }: {
       ]
     : []
 
+  // Submit stays off until every issue is resolved AND every field is filled (user, 2026-10-15); the reasons are shown.
+  const blockers = data
+    ? [
+        ...(unresolved.length ? [`${unresolved.length} issue${unresolved.length > 1 ? 's' : ''} to resolve`] : []),
+        ...checks.filter((c) => !c.ok).map((c) => c.label),
+      ]
+    : []
+  const returned = data?.lastSubmission?.status === SUBMISSION_RETURNED ? data.lastSubmission : null
+
   const fail = (e: unknown) => {
     if (e instanceof ApiError && e.code === REVIEW_ERROR.NOT_IN_REVIEW) onStale()
     const stillOpen = e instanceof ApiError && e.code === REVIEW_ERROR.INCOMPLETE ? (e.details as StillOpen | undefined)?.openIssues : undefined
     setActionError({ message: e instanceof ApiError ? e.message : String(e), stillOpen })
   }
 
-  const create = () => {
+  const submit = () => {
     if (!data) return
     const lines: LineCorrection[] = []
     for (const l of data.lines) {
@@ -250,8 +266,8 @@ function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale }: {
     }
     setBusy(true)
     setActionError(undefined)
-    resubmitPo(uploadId, body)
-      .then((r) => onDone(REVIEW_TEXT.CREATED(data.po.poNumber || poNumber, r.saleOrderCode)))
+    submitPo(uploadId, body)
+      .then(() => onDone(REVIEW_TEXT.SUBMITTED(data.po.poNumber || poNumber)))
       .catch(fail)
       .finally(() => setBusy(false))
   }
@@ -373,7 +389,12 @@ function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale }: {
                           <SkuPicker value={e?.pep ?? ''} options={data.skuOptions} disabled={!canEdit} invalid={!e?.pep}
                             onChange={(pep) => setEdits({ ...edits, [lineKey(l)]: { ...e, pep } })} />
                           {(o?.skuName ?? (e?.pep === l.pepCode ? l.skuName : '')) && <div className="mt-0.5 max-w-[220px] truncate text-[11px] text-ink-600">{o?.skuName ?? l.skuName}</div>}
-                          {errs.map((i) => <div key={i.issueId} className={`mt-1 text-[11px] ${handled(i) && !still.length ? 'text-ink-400 line-through' : 'text-crit'}`}>{i.details ?? label(i.type)}</div>)}
+                          {errs.map((i) => (
+                            <div key={i.issueId} className={`mt-1 flex items-start gap-1 text-[11px] ${handled(i) && !still.length ? 'text-ink-400' : 'text-crit'}`}>
+                              {handled(i) && !still.length && <Check className="mt-px size-3 shrink-0 text-ok" />}
+                              <span className={handled(i) && !still.length ? 'line-through' : ''}>{i.details ?? label(i.type)}</span>
+                            </div>
+                          ))}
                           {still.map((i, n) => <div key={n} className="mt-1 text-[11px] font-medium text-crit">Still open: {i.message}</div>)}
                         </td>
                         <td className="px-2.5 py-2">{numInput(l, 'qty')}{l.freeQty !== '' && Number(l.freeQty) > 0 && <div className="mt-0.5 text-[11px] text-ink-600">{l.freeQty} free</div>}</td>
@@ -397,7 +418,7 @@ function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale }: {
                   {otherIssues.map((i) => (
                     <li key={i.issueId} className={`flex items-start gap-3 rounded-md border px-3 py-2 text-[12.5px] ${handled(i) ? 'border-line bg-alt' : 'border-crit/30 bg-crit-soft'}`}>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2"><Badge tone={handled(i) ? 'neutral' : 'crit'}>{label(i.type)}</Badge>{i.lineNo !== null && <span className="text-ink-600">Line {i.lineNo}</span>}</div>
+                        <div className="flex items-center gap-2"><Badge tone={handled(i) ? 'neutral' : 'crit'}>{label(i.type)}</Badge>{i.lineNo !== null && <span className="text-ink-600">Line {i.lineNo}</span>}<ResolvedMark ok={handled(i)} /></div>
                         {i.details && <div className="mt-1 text-ink-900">{i.details}</div>}
                       </div>
                       {i.canAccept && canEdit && (
@@ -434,6 +455,19 @@ function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale }: {
         </div>
       )}
 
+      {gone && (
+        <div className="pf-tab-in flex items-start gap-2 border-t border-warn/30 bg-warn-soft px-5 py-2.5 text-[12.5px] text-warn">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" /><div>{REVIEW_TEXT.GONE}</div>
+        </div>
+      )}
+
+      {returned && !actionError && (
+        <div className="flex items-start gap-2 border-t border-warn/30 bg-warn-soft px-5 py-2.5 text-[12.5px] text-warn">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <div>{REVIEW_TEXT.RETURNED(returned.decidedAt ? istDateTime(returned.decidedAt) : '', returned.remark ?? '')}</div>
+        </div>
+      )}
+
       {actionError && (
         <div className="flex items-start gap-2 border-t border-crit/30 bg-crit-soft px-5 py-2.5 text-[12.5px] text-crit">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -462,18 +496,21 @@ function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale }: {
               {c.ok ? <Check className="size-3.5" /> : <AlertTriangle className="size-3.5" />}{c.label}
             </span>
           ))}
-          {data && unresolved.length > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-md border border-warn/30 bg-warn-soft px-2 py-1 text-[12px] text-warn">
-              <AlertTriangle className="size-3.5" />{rejectOnly ? REVIEW_TEXT.DUPLICATE_ONLY_REJECT : `${unresolved.length} to fix before the PO can be created`}
+          {data && open.length > 0 && (
+            <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[12px] ${unresolved.length ? 'border-warn/30 bg-warn-soft text-warn' : 'border-ok/30 bg-ok-soft text-ok'}`}>
+              {unresolved.length ? <AlertTriangle className="size-3.5" /> : <Check className="size-3.5" />}
+              {rejectOnly ? REVIEW_TEXT.DUPLICATE_ONLY_REJECT : `${open.length - unresolved.length} of ${open.length} issues resolved`}
             </span>
           )}
           <div className="ml-auto flex gap-2">
             {canEdit && data ? (
               <>
-                <Button onClick={() => setRejecting(true)} disabled={busy}>{REVIEW_TEXT.REJECT}</Button>
-                <Button variant="primary" onClick={create} disabled={busy || unresolved.length > 0}>
-                  {busy ? 'Creating…' : unresolved.length ? `Resolve ${unresolved.length} issue${unresolved.length > 1 ? 's' : ''}` : REVIEW_TEXT.CREATE}
-                </Button>
+                <Button onClick={() => setRejecting(true)} disabled={busy || gone}>{REVIEW_TEXT.REJECT}</Button>
+                <span title={blockers.length ? `Before submitting: ${blockers.join(' · ')}` : undefined}>
+                  <Button variant="primary" onClick={submit} disabled={busy || gone || blockers.length > 0}>
+                    {busy ? 'Submitting…' : blockers.length ? `${blockers.length} thing${blockers.length > 1 ? 's' : ''} left to fill` : REVIEW_TEXT.SUBMIT}
+                  </Button>
+                </span>
               </>
             ) : <Button onClick={onClose}>Close</Button>}
           </div>
@@ -481,6 +518,13 @@ function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale }: {
       )}
     </div>
   )
+}
+
+/** "Resolved ✓" / "To resolve" next to an issue. */
+function ResolvedMark({ ok }: { ok: boolean }) {
+  return ok
+    ? <span className="pf-tab-in ml-auto inline-flex items-center gap-1 text-[11.5px] font-semibold text-ok"><Check className="size-3.5" />{REVIEW_TEXT.RESOLVED}</span>
+    : <span className="ml-auto text-[11.5px] font-medium text-crit">{REVIEW_TEXT.TO_RESOLVE}</span>
 }
 
 // pdf.js is large: loaded only when a PDF is opened in the review panel.

@@ -22,3 +22,8 @@ export const TABLE_HEIGHT = {
   PAGE: 'calc(100vh - 330px)',
   FULL_SCREEN: 'calc(100vh - 210px)',
 } as const
+
+/** Tables: how long the "Copied" chip stays on a clicked cell, and the hint under every table (user, 2026-10-15). */
+export const COPIED_MS = 1_200
+export const GRID_HINT = { OPEN_AND_COPY: 'Click a cell to copy · double-click a row to open', COPY: 'Click a cell to copy' } as const
+

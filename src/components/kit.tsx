@@ -7,6 +7,8 @@ import { Badge, BulkUpload, downloadCsv } from './ui'
 import { DatePicker, Pop, usePopover } from './pickers'
 import { fmtDate, statusTone, type ColKind } from '../lib/ops'
 import { NOT_IN_DB } from '../constants/masters'
+import { copyText } from '../lib/clipboard'
+import { COPIED_MS, GRID_HINT } from '../constants/ui'
 
 // ---- Toolbar -----------------------------------------------------------
 export function SectionToolbar({
@@ -262,7 +264,7 @@ function RowMenu({ items }: { items: () => { label: string; onClick: () => void 
 }
 
 export function DataGrid<T>({
-  cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass, groups, editable, rowEditable, onRowHistory, stickyWidths, maxHeight, onScrolledChange, openOn = 'click',
+  cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass, groups, editable, rowEditable, onRowHistory, stickyWidths, maxHeight, onScrolledChange,
 }: {
   cols: [string, keyof T, ColKind][]; rows: T[]; rowKey: (r: T) => string; sticky?: number
   onRowClick?: (r: T) => void; rowMenu?: (r: T) => { label: string; onClick: () => void }[]; pageSize?: number
@@ -279,12 +281,27 @@ export function DataGrid<T>({
   stickyWidths?: number[]
   /** Give the table its own scroll area of this height (CSS), so the header rows and the sideways scrollbar stay on screen. */
   maxHeight?: string
-  /** Whether a single click or a double-click on a row calls onRowClick (double-click: no text gets selected). */
-  openOn?: 'click' | 'dblclick'
   /** Told true when the table is scrolled / dragged away from its top-left start, false when it is back there. */
   onScrolledChange?: (scrolled: boolean) => void
 }) {
   const [page, setPage] = useState(0)
+  // Every table (user, 2026-10-15): a single click copies that cell's text (as shown), a double-click opens the row.
+  const [copied, setCopied] = useState<string | null>(null)
+  const copyTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const copyCell = (e: React.MouseEvent<HTMLTableCellElement>, id: string) => {
+    if (e.detail > 1) return // the second click of a double-click: that one opens the row
+    if ((e.target as HTMLElement).closest('button, a, input, select, textarea, label')) return // a control in the cell does its own thing
+    if (window.getSelection()?.toString()) return // the person is selecting text themselves
+    const text = e.currentTarget.innerText.trim()
+    if (!text || text === '—') return
+    void copyText(text).then((ok) => {
+      if (!ok) return
+      setCopied(id)
+      clearTimeout(copyTimer.current)
+      copyTimer.current = setTimeout(() => setCopied(null), COPIED_MS)
+    })
+  }
+  const chip = (id: string) => copied === id && <span key={id} className="pf-copy-chip pointer-events-none absolute right-1 top-1/2 z-[6] -translate-y-1/2 rounded bg-ink-900 px-1.5 py-0.5 text-[10.5px] font-semibold text-white shadow">Copied</span>
   const pages = Math.max(1, Math.ceil(rows.length / pageSize))
   useEffect(() => setPage(0), [rows.length])
   const view = rows.slice(page * pageSize, page * pageSize + pageSize)
@@ -344,20 +361,26 @@ export function DataGrid<T>({
               const k = rowKey(r)
               return (
                 <tr key={k}
-                  onClick={openOn === 'click' ? () => onRowClick?.(r) : undefined}
-                  onDoubleClick={openOn === 'dblclick' ? () => onRowClick?.(r) : undefined}
-                  onMouseDown={openOn === 'dblclick' ? (e) => { if (e.detail > 1) e.preventDefault() } : undefined} className={`group ${onRowClick ? 'cursor-pointer' : ''} ${rowClass?.(r) ?? ''}`}>
+                  onDoubleClick={onRowClick ? () => onRowClick(r) : undefined}
+                  onMouseDown={(e) => { if (e.detail > 1) e.preventDefault() }} className={`group ${rowClass?.(r) ?? ''}`}>
                   {cols.map(([label, key, kind], i) => (
                     <td
                       key={label}
                       style={fixed(i)}
                       title={i < sticky ? String(r[key] ?? '') : undefined}
-                      className={`whitespace-nowrap border-b border-line px-3 py-2.5 group-hover:bg-canvas ${i < sticky ? 'sticky z-[5] overflow-hidden text-ellipsis bg-surface' : ''} ${i === sticky - 1 ? 'border-r' : ''}`}
+                      onClick={(e) => copyCell(e, `${k}|${i}`)}
+                      className={`cursor-copy whitespace-nowrap border-b border-line px-3 py-2.5 transition-colors duration-200 group-hover:bg-canvas ${i < sticky ? 'sticky z-[5] overflow-hidden text-ellipsis bg-surface' : 'relative'} ${i === sticky - 1 ? 'border-r' : ''} ${copied === `${k}|${i}` ? '!bg-primary-soft' : ''}`}
                     >
                       <Cell kind={kind} v={r[key]} />
+                      {chip(`${k}|${i}`)}
                     </td>
                   ))}
-                  {trailing?.map((t) => <td key={t.label} className="whitespace-nowrap border-b border-line px-3 py-2.5 group-hover:bg-canvas">{t.render(r)}</td>)}
+                  {trailing?.map((t, j) => (
+                    <td key={t.label} onClick={(e) => copyCell(e, `${k}|t${j}`)}
+                      className={`relative cursor-copy whitespace-nowrap border-b border-line px-3 py-2.5 transition-colors duration-200 group-hover:bg-canvas ${copied === `${k}|t${j}` ? '!bg-primary-soft' : ''}`}>
+                      {t.render(r)}{chip(`${k}|t${j}`)}
+                    </td>
+                  ))}
                   {rowMenu && (
                     <td className="sticky right-0 z-[5] border-b border-l border-line bg-surface px-2 py-1.5 group-hover:bg-canvas" onClick={(e) => e.stopPropagation()}>
                       <div className="relative flex items-center gap-0.5">
@@ -378,6 +401,7 @@ export function DataGrid<T>({
       </div>
       <div className="flex items-center justify-between border-t border-line px-4 py-2.5 text-[12px] text-ink-600">
         <span>
+          <span className="mr-3 hidden text-ink-400 md:inline">{onRowClick ? GRID_HINT.OPEN_AND_COPY : GRID_HINT.COPY}</span>
           <span className="tnum">{rows.length ? page * pageSize + 1 : 0}–{Math.min(rows.length, (page + 1) * pageSize)}</span> of <span className="tnum">{rows.length}</span> records
         </span>
         <div className="flex items-center gap-1">
