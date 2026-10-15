@@ -16,6 +16,7 @@ import { ACCESS } from '../../constants/auth'
 import { PATHS } from '../../constants/pages'
 import { useAuth } from '../../auth/AuthContext'
 import { istDateTime } from '../../lib/time'
+import { SkuPicker } from './SkuPicker'
 
 /*
  * In Review: POs that failed validation (GET /po-review?status=needs_review), oldest first, and the review panel
@@ -369,11 +370,8 @@ function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale }: {
                         <td className="tnum px-2.5 py-2 text-ink-400">{plain(l.lineNo)}</td>
                         <td className="px-2.5 py-2"><div className="font-mono">{l.channelSkuCode || '—'}</div><div className="max-w-[200px] truncate text-[11px] text-ink-600" title={l.description}>{l.description}</div></td>
                         <td className="px-2.5 py-2">
-                          <select value={e?.pep ?? ''} disabled={!canEdit} onChange={(ev) => setEdits({ ...edits, [lineKey(l)]: { ...e, pep: ev.target.value } })}
-                            className={`h-8 max-w-[220px] rounded-md border bg-surface px-2 font-mono text-[12px] ${e?.pep ? 'border-line' : 'border-crit/60'} disabled:bg-alt`}>
-                            <option value="">Map SKU…</option>
-                            {data.skuOptions.map((s) => <option key={s.pepCode} value={s.pepCode}>{s.pepCode}{s.skuName ? ` · ${s.skuName}` : ''}</option>)}
-                          </select>
+                          <SkuPicker value={e?.pep ?? ''} options={data.skuOptions} disabled={!canEdit} invalid={!e?.pep}
+                            onChange={(pep) => setEdits({ ...edits, [lineKey(l)]: { ...e, pep } })} />
                           {(o?.skuName ?? (e?.pep === l.pepCode ? l.skuName : '')) && <div className="mt-0.5 max-w-[220px] truncate text-[11px] text-ink-600">{o?.skuName ?? l.skuName}</div>}
                           {errs.map((i) => <div key={i.issueId} className={`mt-1 text-[11px] ${handled(i) && !still.length ? 'text-ink-400 line-through' : 'text-crit'}`}>{i.details ?? label(i.type)}</div>)}
                           {still.map((i, n) => <div key={n} className="mt-1 text-[11px] font-medium text-crit">Still open: {i.message}</div>)}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentType, ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { BadgeCheck, ChevronDown, ChevronsLeft, ChevronsRight, Database, LineChart, LogOut, Search, Truck } from 'lucide-react'
 import Analytics from './pages/Analytics'
 import Masters from './pages/Masters'
@@ -15,9 +16,18 @@ import DPAnalytics from './pages/dp/DPAnalytics'
 import { APPROVALS, CHANNEL_PRIORITY_DEFAULT } from './lib/ops'
 import { useAuth, type User } from './auth/AuthContext'
 import { FullPageMessage } from './auth/RequireAuth'
-import { ACCESS, UI_TEXT } from './constants/auth'
+import { ACCESS, ROLE_LABEL, TEAM_LABEL, UI_TEXT } from './constants/auth'
 import { DummyDataStrip } from './components/DummyData'
-import { HOME_PATH, MASTER_TAB_BY_PATH, NAV_GROUPS, PATHS, isDummyPage, type NavGroup } from './constants/pages'
+import { HOME_PATH, MASTER_TAB_BY_PATH, NAV_GROUPS, PATHS, RAIL_PAGES, isDummyPage, type NavGroup } from './constants/pages'
+import { SIDEBAR_COLLAPSED_KEY } from './constants/ui'
+
+/** The sidebar choice survives a reload (browser storage; private windows may refuse it, then it just isn't kept). */
+const readCollapsed = (): boolean => {
+  try { return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1' } catch { return false }
+}
+const saveCollapsed = (v: boolean) => {
+  try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, v ? '1' : '0') } catch { /* not kept */ }
+}
 
 const GROUP_ICONS: Record<string, ComponentType<{ className?: string }>> = {
   [PATHS.MASTERS]: Database,
@@ -42,7 +52,22 @@ export default function App() {
   const navigate = useNavigate()
   const auth = useAuth()
   const [open, setOpen] = useState<Record<string, boolean>>({ [PATHS.MASTERS]: false, [PATHS.OPERATIONS]: true, [PATHS.PLANNING]: true, [PATHS.APPROVALS]: false })
-  const [collapsed, setCollapsed] = useState(false)
+  // collapsed = the person's saved choice; a RAIL_PAGES page (PO Overview) opens with the rail unless the person
+  // expanded it there (openHere, reset on every page switch); peek = the rail is hovered, so it shows wide over the
+  // page. Width changes animate (duration-300).
+  const [collapsed, setCollapsedState] = useState(readCollapsed)
+  const [openHere, setOpenHere] = useState(false)
+  const [peek, setPeek] = useState(false)
+  const railPage = RAIL_PAGES.has(pathname)
+  const railed = collapsed || (railPage && !openHere)
+  const wide = !railed || peek
+  const toggleSidebar = () => {
+    setPeek(false)
+    if (railed) { setCollapsedState(false); saveCollapsed(false); if (railPage) setOpenHere(true) }
+    else if (railPage) setOpenHere(false)
+    else { setCollapsedState(true); saveCollapsed(true) }
+  }
+  const queryClient = useQueryClient()
   const [prio, setPrio] = useState<Record<string, number>>(CHANNEL_PRIORITY_DEFAULT)
   const [brand, setBrand] = useState<(typeof BRANDS)[number]>('All')
 
@@ -70,20 +95,34 @@ export default function App() {
     [PATHS.APPROVALS, <Approvals />],
   ]
 
+  // Pages stay alive once opened (hidden when not shown), so switching back keeps their filters, tabs and scroll;
+  // their cached data older than the cache's stale time is refreshed quietly when they are shown again.
+  const [visited, setVisited] = useState<string[]>([])
+  useEffect(() => {
+    if (pages.some(([p]) => p === pathname)) setVisited((v) => (v.includes(pathname) ? v : [...v, pathname]))
+    setOpenHere(false)
+    void queryClient.refetchQueries({ type: 'active', stale: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname])
+  const isPage = pages.some(([p]) => p === pathname)
+
   return (
-    <div className={`grid h-full grid-cols-1 ${collapsed ? 'md:grid-cols-[68px_1fr]' : 'md:grid-cols-[248px_1fr]'}`}>
-      {/* Left nav rail */}
-      <aside className="hidden min-h-0 flex-col border-r border-line bg-surface md:flex">
-        <div className="flex items-center gap-2.5 px-4 py-4">
+    <div className={`grid h-full grid-cols-1 transition-[grid-template-columns] duration-300 ease-in-out ${railed ? 'md:grid-cols-[68px_1fr]' : 'md:grid-cols-[248px_1fr]'}`}>
+      {/* Left nav rail: a 68px rail when collapsed (or while a table wants the full view); hovering it opens it over
+          the page (peek). The panel's width animates; its labels are clipped while it moves. */}
+      <aside className="relative hidden min-h-0 md:block" onMouseEnter={() => railed && setPeek(true)} onMouseLeave={() => setPeek(false)}>
+      <div className={`absolute inset-y-0 left-0 z-40 flex min-h-0 flex-col overflow-hidden whitespace-nowrap border-r border-line bg-surface transition-[width,box-shadow] duration-300 ease-in-out ${wide ? 'w-[248px]' : 'w-[68px]'} ${peek ? 'shadow-xl' : ''}`}>
+        <div className={`flex gap-2.5 px-4 py-4 ${wide ? 'items-center' : 'flex-col items-center px-0'}`}>
           <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-[13px] font-bold text-white">PF</div>
-          {!collapsed && (
+          {wide && (
             <div className="leading-tight">
               <div className="font-serif text-[15px] font-medium text-ink-900">Post FG</div>
               <div className="text-[10px] uppercase tracking-widest text-ink-400">ERP</div>
             </div>
           )}
-          <button onClick={() => setCollapsed((c) => !c)} className={`rounded-md p-1 text-ink-400 hover:bg-alt hover:text-ink-900 ${collapsed ? 'hidden' : 'ml-auto'}`} title="Collapse">
-            <ChevronsLeft className="size-4" />
+          {/* One button, always visible: collapse when open; expand (keep open) on the rail and while peeking. */}
+          <button onClick={toggleSidebar} className={`rounded-md p-1 text-ink-400 hover:bg-alt hover:text-ink-900 ${wide ? 'ml-auto' : ''}`} title={railed ? 'Expand (keep open)' : 'Collapse'}>
+            {railed ? <ChevronsRight className="size-4" /> : <ChevronsLeft className="size-4" />}
           </button>
         </div>
 
@@ -96,20 +135,20 @@ export default function App() {
               <div key={g.key} className="mb-0.5">
                 <button
                   onClick={() => {
-                    if (leaf || collapsed) navigate(firstPath(g))
+                    if (leaf || !wide) navigate(firstPath(g))
                     else setOpen({ ...open, [g.key]: !open[g.key] })
                   }}
                   title={g.label}
                   className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-[13px] font-medium transition-colors ${
-                    activeGroup && (leaf || collapsed) ? 'bg-primary text-white' : activeGroup ? 'text-primary' : 'text-ink-900 hover:bg-alt'
+                    activeGroup && (leaf || !wide) ? 'bg-primary text-white' : activeGroup ? 'text-primary' : 'text-ink-900 hover:bg-alt'
                   }`}
                 >
                   <Icon className="size-4 shrink-0" />
-                  {!collapsed && <span className="flex-1 text-left">{g.label}{leaf && isDummyPage(g.key) && <DummyDot />}</span>}
-                  {!collapsed && leaf && pending > 0 && <span className={`tnum rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${activeGroup ? 'bg-white/20 text-white' : 'bg-crit-soft text-crit'}`}>{pending}</span>}
-                  {!collapsed && !leaf && <ChevronDown className={`size-3.5 text-ink-400 transition-transform ${open[g.key] ? '' : '-rotate-90'}`} />}
+                  {wide && <span className="flex-1 text-left">{g.label}{leaf && isDummyPage(g.key) && <DummyDot />}</span>}
+                  {wide && leaf && pending > 0 && <span className={`tnum rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${activeGroup ? 'bg-white/20 text-white' : 'bg-crit-soft text-crit'}`}>{pending}</span>}
+                  {wide && !leaf && <ChevronDown className={`size-3.5 text-ink-400 transition-transform ${open[g.key] ? '' : '-rotate-90'}`} />}
                 </button>
-                {!collapsed && !leaf && open[g.key] && (
+                {wide && !leaf && open[g.key] && (
                   <div className="my-1 ml-[21px] border-l border-line pl-3">
                     {g.items.map((it) => {
                       const on = pathname === it.path
@@ -134,14 +173,10 @@ export default function App() {
 
         <div className="border-t border-line px-3 py-3">
           <div className="flex items-center gap-1.5 px-1 text-[11px] text-ink-600">
-            <span className="size-1.5 rounded-full bg-ok" /> {!collapsed && 'Uniware connected'}
+            <span className="size-1.5 rounded-full bg-ok" /> {wide && 'Uniware connected'}
           </div>
-          {collapsed && (
-            <button onClick={() => setCollapsed(false)} className="mt-2 flex w-full justify-center rounded-md border border-line py-1.5 text-ink-600 hover:bg-alt" title="Expand">
-              <ChevronsRight className="size-4" />
-            </button>
-          )}
         </div>
+      </div>
       </aside>
 
       {/* Main */}
@@ -167,6 +202,12 @@ export default function App() {
           </label>
 
           <div className="ml-auto flex items-center gap-3">
+            {/* Who am I: the team when the person has one (e.g. "Warehouse"), else their role(s) (e.g. "Admin") */}
+            {auth.status === 'signedIn' && (
+              <span className="hidden whitespace-nowrap rounded-full bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary sm:inline" title={auth.user.email}>
+                {auth.user.team ? TEAM_LABEL[auth.user.team] ?? auth.user.team : auth.user.roles.map((r) => ROLE_LABEL[r] ?? r).join(' · ')}
+              </span>
+            )}
             <div className="hidden items-center gap-1 rounded-md border border-line p-0.5 text-[11px] sm:flex">
               <span className="px-1.5 text-ink-400">Brand</span>
               {BRANDS.map((b) => (
@@ -178,17 +219,20 @@ export default function App() {
         </header>
 
         <main className={`min-w-0 flex-1 overflow-y-auto p-5 lg:p-6 ${dummy ? 'dummy-data bg-canvas' : ''}`}>
-          <div key={pathname} className="mx-auto max-w-[1440px]">
+          <div className="mx-auto max-w-[1440px]">
             {dummy && <DummyDataStrip />}
+            {/* Every page opened so far stays mounted; only the current one is shown. */}
+            {pages.filter(([path]) => visited.includes(path)).map(([path, element]) => (
+              <div key={path} hidden={path !== pathname}>{canSee(path) ? element : <FullPageMessage text={UI_TEXT.NO_ACCESS} />}</div>
+            ))}
+            {/* Redirects and "not found" only: the pages themselves are rendered above. */}
             <Routes>
               <Route index element={<Navigate to={HOME_PATH} replace />} />
               {NAV_GROUPS.filter((g) => g.items.length > 0).map((g) => (
                 <Route key={g.key} path={g.key} element={<Navigate to={g.items[0].path} replace />} />
               ))}
-              {pages.map(([path, element]) => (
-                <Route key={path} path={path} element={canSee(path) ? element : <FullPageMessage text={UI_TEXT.NO_ACCESS} />} />
-              ))}
-              <Route path="*" element={<FullPageMessage text={UI_TEXT.NOT_FOUND} />} />
+              {pages.map(([path]) => <Route key={path} path={path} element={null} />)}
+              <Route path="*" element={isPage ? null : <FullPageMessage text={UI_TEXT.NOT_FOUND} />} />
             </Routes>
           </div>
         </main>

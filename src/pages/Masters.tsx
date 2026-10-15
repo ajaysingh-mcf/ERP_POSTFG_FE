@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { AlertTriangle, History, Layers, Pencil, Plus, RefreshCw } from 'lucide-react'
 import { ApiError } from '../api/client'
@@ -6,6 +7,7 @@ import { listChannelCustomers, listChannelSkus, listChannelWarehouses, listPepSk
 import { NOT_AVAILABLE_YET, NOT_IN_DB, SKU_STATUS } from '../constants/masters'
 import { OPS_CHANNELS, type ColKind } from '../lib/ops'
 import { Badge, Button, Drawer, PageTitle, SubTabs } from '../components/ui'
+import { Reveal } from '../components/shell'
 import { DataGrid, FilterPanel, PrimaryBtn, SectionToolbar, exportRows, inputCls, useSection, type FilterDef } from '../components/kit'
 
 type Row = Record<string, string | number>
@@ -141,37 +143,24 @@ const CFG: Record<string, Cfg> = {
     trailing: [{ label: 'Status', render: status }],
   },
 }
-const SEED: Record<string, Row[]> = { pep: [], channelSku: [], customer: [], pepWh: [], chWh: [] }
+/** Data cache key of a master list (TanStack Query): a list loaded once shows at once when the tab opens again. */
+const mastersKey = (id: string) => ['masters', id] as const
+const NO_ROWS: Row[] = []
 
 export default function Masters({ tab = 'PEP SKU master' }: { tab?: string }) {
-  const [data, setData] = useState(SEED)
   const [wh, setWh] = useState<'pepWh' | 'chWh'>('pepWh')
   const id = tab === 'Channel SKU master' ? 'channelSku' : tab === 'Channel / Customer master' ? 'customer' : tab === 'Warehouses' ? wh : 'pep'
-  const [state, setState] = useState<{ loading: boolean; error?: string }>({ loading: false })
-  const [reload, setReload] = useState(0)
-
-  useEffect(() => {
-    const load = LOADERS[id]
-    if (!load) return
-    const ctrl = new AbortController()
-    setState({ loading: true })
-    load(ctrl.signal)
-      .then((rows) => {
-        setData((d) => ({ ...d, [id]: rows }))
-        setState({ loading: false })
-      })
-      .catch((e: unknown) => {
-        if (ctrl.signal.aborted) return
-        setState({ loading: false, error: e instanceof ApiError ? e.message : String(e) })
-      })
-    return () => ctrl.abort()
-  }, [id, reload])
+  const queryClient = useQueryClient()
+  const query = useQuery({ queryKey: mastersKey(id), queryFn: ({ signal }) => LOADERS[id](signal) })
+  /** Rows of a master: the open one from its query, another one from the cache (for the sub-tab counts). */
+  const rowsOf = (k: string): Row[] => (k === id ? query.data : queryClient.getQueryData<Row[]>(mastersKey(k))) ?? NO_ROWS
+  const state = { loading: query.isPending, error: query.error ? (query.error instanceof ApiError ? query.error.message : String(query.error)) : undefined }
 
   const fromApi = CFG[id].readOnly
   const box = 'rounded-[var(--radius)] border border-line bg-surface px-4 py-10 text-center text-[13px] text-ink-600'
   const save = (k: string, r: Row, prevKey?: string) => {
     const key = CFG[k].key
-    setData((d) => ({ ...d, [k]: prevKey !== undefined ? d[k].map((x) => (x[key] === prevKey ? r : x)) : [r, ...d[k]] }))
+    queryClient.setQueryData<Row[]>(mastersKey(k), (d = []) => (prevKey !== undefined ? d.map((x) => (x[key] === prevKey ? r : x)) : [r, ...d]))
   }
   return (
     <div className="space-y-5">
@@ -183,17 +172,17 @@ export default function Masters({ tab = 'PEP SKU master' }: { tab?: string }) {
           : <><span className="hidden text-[11px] text-ink-400 sm:inline">Synced from Uniware · 2 min ago</span><Button icon={<RefreshCw className="size-3.5" />}>Sync now</Button></>}
       />
       {tab === 'Warehouses' && (
-        <SubTabs value={wh} onChange={setWh} tabs={[{ key: 'pepWh', label: 'PEP warehouses', count: data.pepWh.length || undefined }, { key: 'chWh', label: 'Channel warehouses', count: data.chWh.length || undefined }]} />
+        <SubTabs value={wh} onChange={setWh} tabs={[{ key: 'pepWh', label: 'PEP warehouses', count: rowsOf('pepWh').length || undefined }, { key: 'chWh', label: 'Channel warehouses', count: rowsOf('chWh').length || undefined }]} />
       )}
       {fromApi && state.error ? (
         <div className="flex items-center gap-3 rounded-[var(--radius)] border border-crit/30 bg-crit-soft px-4 py-3 text-[13px] text-crit">
           <AlertTriangle className="size-4" /> Could not load {CFG[id].entity}: {state.error}
-          <button onClick={() => setReload((n) => n + 1)} className="ml-auto font-semibold">Retry</button>
+          <button onClick={() => void query.refetch()} className="ml-auto font-semibold">Retry</button>
         </div>
       ) : fromApi && state.loading ? (
         <div className={box}>Loading {CFG[id].entity}…</div>
       ) : (
-        <MasterTable key={id} id={id} rows={data[id]} onSave={(r, prev) => save(id, r, prev)} />
+        <MasterTable key={id} id={id} rows={rowsOf(id)} onSave={(r, prev) => save(id, r, prev)} />
       )}
     </div>
   )
@@ -227,7 +216,7 @@ function MasterTable({ id, rows, onSave }: { id: string; rows: Row[]; onSave: (r
         primary={c.readOnly
           ? <span title={NOT_AVAILABLE_YET}><Button disabled icon={<Plus className="size-4" />}>{c.addLabel}</Button></span>
           : <PrimaryBtn icon={<Plus className="size-4" />} onClick={() => setEdit({ row: blank() })}>{c.addLabel}</PrimaryBtn>} />
-      {s.open && <FilterPanel defs={filters}value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} />}
+      <Reveal open={s.open}><FilterPanel defs={filters} value={s.filters} onApply={(f) => { s.setFilters(f); s.setOpen(false) }} onClose={() => s.setOpen(false)} /></Reveal>
       <DataGrid cols={c.cols} rows={view} rowKey={(r) => String(r[c.key])} sticky={1}
         onRowClick={(r) => setEdit({ row: r, prev: String(r[c.key]) })}
         trailing={[

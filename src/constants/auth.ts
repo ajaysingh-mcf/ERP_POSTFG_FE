@@ -35,3 +35,13 @@ export const UI_TEXT = {
   NOT_FOUND: 'This page does not exist.',
   VIEW_ONLY: 'View only',
 } as const
+
+/** Labels of the header's "who am I" badge: the team when the person has one, else their role(s). */
+export const ROLE_LABEL: Record<string, string> = { developer: 'Developer', admin: 'Admin' }
+export const TEAM_LABEL: Record<string, string> = {
+  planning: 'Planning',
+  warehouse: 'Warehouse',
+  logistics: 'Logistics',
+  accounts: 'Accounts',
+  viewer: 'Viewer',
+}

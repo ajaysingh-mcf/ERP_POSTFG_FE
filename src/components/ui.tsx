@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
 type Tone = 'ok' | 'warn' | 'crit' | 'info' | 'neutral' | 'primary'
@@ -96,27 +96,40 @@ export function SubTabs<T extends string>({ value, onChange, tabs }: { value: T;
 }
 
 // Right contextual drawer (~520px)
+/** Time of the drawer's slide in / out (ms); the same as .pf-drawer-* in index.css. */
+const DRAWER_MS = 250
+
+/**
+ * A panel sliding in from the right over a fading backdrop; ✕, a backdrop click and Esc slide it out first, then call
+ * onClose. `footer` may be a function getting that same animated close, for its own Close / Cancel buttons.
+ */
 export function Drawer({
   open, onClose, title, sub, children, footer,
-}: { open: boolean; onClose: () => void; title: ReactNode; sub?: ReactNode; children: ReactNode; footer?: ReactNode }) {
+}: { open: boolean; onClose: () => void; title: ReactNode; sub?: ReactNode; children: ReactNode; footer?: ReactNode | ((close: () => void) => ReactNode) }) {
+  const [leaving, setLeaving] = useState(false)
+  const close = useCallback(() => {
+    setLeaving(true)
+    setTimeout(() => { setLeaving(false); onClose() }, DRAWER_MS)
+  }, [onClose])
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
     if (open) document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open, close])
   if (!open) return null
+  const foot = typeof footer === 'function' ? footer(close) : footer
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-ink-900/40 backdrop-blur-[1px]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="flex h-full w-full max-w-[540px] flex-col border-l border-line bg-surface shadow-2xl">
+    <div className={`fixed inset-0 z-50 flex justify-end bg-ink-900/40 backdrop-blur-[1px] ${leaving ? 'pf-backdrop-out' : 'pf-backdrop-in'}`} onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <div className={`flex h-full w-full max-w-[540px] flex-col border-l border-line bg-surface shadow-2xl ${leaving ? 'pf-drawer-out' : 'pf-drawer-in'}`}>
         <div className="flex items-start justify-between border-b border-line px-5 py-4">
           <div className="min-w-0">
             <div className="text-[15px] font-semibold text-ink-900">{title}</div>
             {sub && <div className="mt-0.5 text-[12px] text-ink-600">{sub}</div>}
           </div>
-          <button onClick={onClose} className="rounded-md p-1 text-ink-400 hover:bg-alt hover:text-ink-900">✕</button>
+          <button onClick={close} className="rounded-md p-1 text-ink-400 hover:bg-alt hover:text-ink-900">✕</button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {footer && <div className="flex items-center justify-end gap-2 border-t border-line bg-alt/40 px-5 py-3">{footer}</div>}
+        {foot && <div className="flex items-center justify-end gap-2 border-t border-line bg-alt/40 px-5 py-3">{foot}</div>}
       </div>
     </div>
   )

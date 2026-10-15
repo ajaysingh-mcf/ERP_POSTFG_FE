@@ -46,6 +46,12 @@ export const SHOW_DUMMY_MARK = import.meta.env.DEV
 
 export const isDummyPage = (path: string) => SHOW_DUMMY_MARK && !LIVE_PAGES.has(path)
 
+/**
+ * Pages that open with the sidebar collapsed to its rail (wide tables; user, 2026-10-14). Temporary: the person's own
+ * expand / collapse choice is back on the other pages; hovering the rail peeks it, its expand button opens it.
+ */
+export const RAIL_PAGES: ReadonlySet<string> = new Set<string>([PATHS.PO_OVERVIEW])
+
 /** Where the app opens after sign-in. */
 export const HOME_PATH = PATHS.PO_OVERVIEW
 

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.104.2",
     "lucide-react": "^1.52.0",
     "pdfjs-dist": "6.3.289",
     "react": "^19.0.0",

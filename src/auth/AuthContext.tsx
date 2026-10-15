@@ -5,7 +5,8 @@ import { ACCESS, AUTH_ENDPOINTS, ERROR_CODE, type AccessLevel } from '../constan
 
 /* The signed-in user from GET /auth/me; the session itself is the backend's httpOnly cookie. */
 
-export type User = { id: string; name: string; email: string; roles: string[] }
+/** team = the person's PO Overview team (planning, warehouse, logistics, accounts, viewer), null = none. */
+export type User = { id: string; name: string; email: string; roles: string[]; team: string | null }
 type Me = { user: User; access: Record<string, AccessLevel> }
 
 type AuthState =

@@ -9,6 +9,8 @@ import { PO_OVERVIEW_ENDPOINT } from '../constants/poOverview'
 export type ShipmentItem = {
   uid: string
   [column: string]: unknown
+  /** May this person edit this shipment (their team + their facilities)? */
+  canEdit: boolean
   lines: number
   updatedQty: number
   updatedGmv: number
@@ -92,8 +94,71 @@ export const getFilterOptions = (signal?: AbortSignal) => api<FilterOptions>(PO_
 
 /* GET /po-overview/columns: the column groups per team, in workflow order, and the person's access to each. */
 
-export type ColumnDef = { field: string; label: string; kind: 'text' | 'mono' | 'date' | 'num' | 'money' | 'link' | 'status' }
+/** locked = never edited on the screen (PO number, facility, channel, location: their own rules later). */
+export type ColumnDef = { field: string; label: string; kind: 'text' | 'mono' | 'date' | 'num' | 'money' | 'link' | 'status'; locked?: boolean }
 export type TeamColumns = { key: string; label: string; step: number; access: 'view' | 'edit'; columns: ColumnDef[] }
-export type PoOverviewColumns = { keyColumns: ColumnDef[]; systemColumns: ColumnDef[]; teams: TeamColumns[] }
+export type PoOverviewColumns = {
+  keyColumns: ColumnDef[]
+  systemColumns: ColumnDef[]
+  /** Workflow order; teams whose columns the person can't see are left out. */
+  teams: TeamColumns[]
+  team: string | null
+  /** true = the person edits only shipments of `facilities`; the list opens filtered to them. */
+  facilityScoped: boolean
+  facilities: string[]
+}
 
 export const getColumns = (signal?: AbortSignal) => api<PoOverviewColumns>(PO_OVERVIEW_ENDPOINT.COLUMNS, { signal })
+
+/* Editing (PATCH /po-overview/shipments/:uid): only the changed fields, each with the value the person started from. */
+
+export type FieldChanges = Record<string, { from: unknown; to: unknown }>
+
+export const saveShipment = (uid: string, body: { changes: FieldChanges; remark?: string }) =>
+  api<{ shipment: ShipmentItem; lines: LineItem[]; logIds: string[] }>(PO_OVERVIEW_ENDPOINT.SHIPMENT(uid), { method: 'PATCH', body: JSON.stringify(body) })
+
+/** 409 FIELDS_CHANGED_MEANWHILE details: what is stored now and who changed it last. */
+export type ConflictDetail = { field: string; now: unknown; by: string | null; at: string | null }
+
+export type HistoryItem = {
+  id: string
+  at: string
+  by: string | null
+  byEmail: string | null
+  /** The person's team now (planning, warehouse...). */
+  byTeam: string | null
+  action: string
+  source: string
+  field: string | null
+  oldValue: string | null
+  newValue: string | null
+  remark: string | null
+  /** The rows of one save share it. */
+  batchId: string | null
+  /** The field is hidden from me: the change is listed without its values. */
+  valueHidden: boolean
+}
+
+export const getHistory = (uid: string, signal?: AbortSignal) => api<HistoryItem[]>(PO_OVERVIEW_ENDPOINT.HISTORY(uid), { signal })
+
+export type EditOptions = {
+  statuses: Record<'planning' | 'warehouse' | 'logistics', string[]>
+  transporters: string[]
+  appointmentRemarks: { remark: string; category: string | null }[]
+  statusActive: string[]
+  /** statusPlanning -> planning ... */
+  statusFields: Record<string, 'planning' | 'warehouse' | 'logistics'>
+  transporterFields: string[]
+  /** The field whose change needs an appointment remark. */
+  appointmentField: string
+}
+
+export const getEditOptions = (signal?: AbortSignal) => api<EditOptions>(PO_OVERVIEW_ENDPOINT.EDIT_OPTIONS, { signal })
+
+/* Live updates: SSE at PO_OVERVIEW_ENDPOINT.EVENTS; the fallback polls "changes since". */
+
+export type ShipmentChange = { uid: string; logId: string; action: string; fields: string[]; by: string | null }
+
+export const getChanges = (after?: string, signal?: AbortSignal) =>
+  api<{ lastId: string; changes: ShipmentChange[] }>(`${PO_OVERVIEW_ENDPOINT.CHANGES}${after ? `?after=${encodeURIComponent(after)}` : ''}`, { signal })
+

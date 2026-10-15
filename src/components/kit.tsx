@@ -1,8 +1,10 @@
 // Section-level toolkit: toolbar (search · filters · CSV/Excel/Upload), filter panel, data grid
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Download, Filter, MoreHorizontal, Search, Upload, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, Filter, History, MoreHorizontal, Pencil, Search, Upload, X } from 'lucide-react'
 import { Badge, BulkUpload, downloadCsv } from './ui'
+import { DatePicker, Pop, usePopover } from './pickers'
 import { fmtDate, statusTone, type ColKind } from '../lib/ops'
 import { NOT_IN_DB } from '../constants/masters'
 
@@ -73,19 +75,14 @@ export type FilterValues = Record<string, string | string[]>
 export const countActive = (v: FilterValues) => Object.values(v).filter((x) => (Array.isArray(x) ? x.length : x)).length
 
 function MultiSelect({ value, onChange, options, placeholder }: { value: string[]; onChange: (v: string[]) => void; options: readonly string[]; placeholder: string }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const h = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false)
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
+  // Our popover: opens / closes with the same animation as the other pickers (components/pickers.tsx).
+  const { open, leaving, ref, toggle } = usePopover()
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={`flex h-9 w-full items-center gap-2 rounded-[var(--radius)] border bg-surface px-3 text-left text-[13px] ${open ? 'border-primary ring-2 ring-primary/15' : 'border-line'}`}
+        onClick={toggle}
+        className={`flex h-9 w-full items-center gap-2 rounded-[var(--radius)] border bg-surface px-3 text-left text-[13px] transition-[border-color,box-shadow] duration-200 ease-out ${open ? 'border-primary ring-2 ring-primary/15' : 'border-line'}`}
       >
         <span className={`min-w-0 flex-1 truncate ${value.length ? 'text-ink-900' : 'text-ink-400'}`}>
           {value.length ? (value.length <= 2 ? value.join(', ') : `${value[0]} +${value.length - 1}`) : placeholder}
@@ -97,7 +94,7 @@ function MultiSelect({ value, onChange, options, placeholder }: { value: string[
         )}
       </button>
       {open && (
-        <div className="absolute z-30 mt-1 max-h-60 w-full min-w-[180px] overflow-y-auto rounded-[var(--radius)] border border-line bg-surface p-1 shadow-lg">
+        <Pop leaving={leaving} className="max-h-60 w-full min-w-[180px] overflow-y-auto">
           {options.map((o) => {
             const on = value.includes(o)
             return (
@@ -107,7 +104,7 @@ function MultiSelect({ value, onChange, options, placeholder }: { value: string[
               </label>
             )
           })}
-        </div>
+        </Pop>
       )}
     </div>
   )
@@ -131,10 +128,7 @@ export function FilterPanel({ defs, value, onApply, onClose }: { defs: FilterDef
             {d.type === 'multi' ? (
               <MultiSelect value={(draft[d.key] as string[]) ?? []} onChange={(v) => set(d.key, v)} options={d.options} placeholder={d.placeholder ?? `Select ${d.label.toLowerCase()}`} />
             ) : d.type === 'date' ? (
-              <div className="relative">
-                <Calendar className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-ink-400" />
-                <input type="date" value={(draft[d.key] as string) ?? ''} onChange={(e) => set(d.key, e.target.value)} className={`${fieldCls} pl-8 ${draft[d.key] ? '' : 'text-ink-400'}`} />
-              </div>
+              <DateInput value={(draft[d.key] as string) ?? ''} onChange={(v) => set(d.key, v)} className={draft[d.key] ? '' : 'text-ink-400'} />
             ) : (
               <input value={(draft[d.key] as string) ?? ''} onChange={(e) => set(d.key, e.target.value)} placeholder={d.placeholder} className={fieldCls} />
             )}
@@ -203,51 +197,143 @@ export function Cell({ kind, v }: { kind: ColKind; v: unknown }) {
   }
 }
 
+/** Width of the row menu (px); the menu's right edge lines up with its ⋯ button. */
+const ROW_MENU_W = 176
+const ROW_MENU_ITEM_PX = 32
+const ROW_MENU_MS = 150
+
+/*
+ * The ⋯ menu of a row (2026-10-14): drawn in a layer above the whole page (portal, position fixed), so it is never cut
+ * by the table's scroll area or covered by the fixed cells of the rows below; opens upward when there is no room
+ * below; fades in / out; closes on a click outside, Esc, scroll or resize.
+ */
+function RowMenu({ items }: { items: () => { label: string; onClick: () => void }[] }) {
+  const [pos, setPos] = useState<{ top: number; left: number; up: boolean } | null>(null)
+  const [leaving, setLeaving] = useState(false)
+  const btn = useRef<HTMLButtonElement>(null)
+  const box = useRef<HTMLDivElement>(null)
+  const list = pos ? items() : []
+  const close = (now = false) => {
+    if (!pos) return
+    if (now) { setPos(null); setLeaving(false); return }
+    setLeaving(true)
+    setTimeout(() => { setPos(null); setLeaving(false) }, ROW_MENU_MS)
+  }
+  const open = () => {
+    const r = btn.current!.getBoundingClientRect()
+    const h = items().length * ROW_MENU_ITEM_PX + 10
+    const up = r.bottom + h + 8 > window.innerHeight && r.top - h - 8 > 0
+    setPos({ top: up ? r.top - h - 4 : r.bottom + 4, left: Math.max(8, r.right - ROW_MENU_W), up })
+  }
+  useEffect(() => {
+    if (!pos) return
+    const onDown = (e: MouseEvent) => { const t = e.target as Node; if (!box.current?.contains(t) && !btn.current?.contains(t)) close() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    const onMove = () => close(true)
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', onMove, true)
+    window.addEventListener('resize', onMove)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', onMove, true)
+      window.removeEventListener('resize', onMove)
+    }
+  })
+  return (
+    <>
+      <button ref={btn} aria-label="Open menu" aria-expanded={!!pos} onClick={() => (pos ? close() : open())}
+        className={`pf-press rounded-md p-1.5 transition-colors duration-150 hover:bg-alt hover:text-ink-900 ${pos && !leaving ? 'bg-alt text-ink-900' : 'text-ink-600'}`}>
+        <MoreHorizontal className="size-4" />
+      </button>
+      {pos && createPortal(
+        <div ref={box} role="menu" style={{ top: pos.top, left: pos.left, width: ROW_MENU_W }}
+          className={`fixed z-[100] rounded-[var(--radius)] border border-line bg-surface p-1 shadow-lg ${pos.up ? 'origin-bottom-right' : 'origin-top-right'} ${leaving ? 'pf-pop-out' : 'pf-pop-in'}`}>
+          {list.map((m) => (
+            <button key={m.label} role="menuitem" onClick={() => { close(); m.onClick() }}
+              className="pf-press block h-8 w-full rounded px-2.5 text-left text-[13px] text-ink-900 transition-colors duration-150 hover:bg-alt">{m.label}</button>
+          ))}
+        </div>,
+        document.body,
+      )}
+    </>
+  )
+}
+
 export function DataGrid<T>({
-  cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass, groups, editable,
+  cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass, groups, editable, rowEditable, onRowHistory, stickyWidths, maxHeight, onScrolledChange, openOn = 'click',
 }: {
   cols: [string, keyof T, ColKind][]; rows: T[]; rowKey: (r: T) => string; sticky?: number
   onRowClick?: (r: T) => void; rowMenu?: (r: T) => { label: string; onClick: () => void }[]; pageSize?: number
   trailing?: { label: string; render: (r: T) => ReactNode }[]; rowClass?: (r: T) => string
-  /** A header row above the columns: each group spans `span` columns in order; `edit` = tinted as editable. */
+  /** A header row above the columns: each group spans `span` columns in order; `edit` = marked with a pencil. */
   groups?: { label: string; span: number; edit?: boolean }[]
-  /** Columns the person can edit: header and cells tinted with the primary colour. */
+  /** Columns the person can edit: their header carries a pencil (no colour). */
   editable?: ReadonlySet<keyof T>
+  /** Rows the person may edit at all (e.g. only their facilities'): a pencil in their Action cell. */
+  rowEditable?: (r: T) => boolean
+  /** Adds a History button to the Action cell (who changed what and when). */
+  onRowHistory?: (r: T) => void
+  /** Width (px) of each fixed column; default 132 each. Fixed cells cut long values with "…" (full value on hover). */
+  stickyWidths?: number[]
+  /** Give the table its own scroll area of this height (CSS), so the header rows and the sideways scrollbar stay on screen. */
+  maxHeight?: string
+  /** Whether a single click or a double-click on a row calls onRowClick (double-click: no text gets selected). */
+  openOn?: 'click' | 'dblclick'
+  /** Told true when the table is scrolled / dragged away from its top-left start, false when it is back there. */
+  onScrolledChange?: (scrolled: boolean) => void
 }) {
   const [page, setPage] = useState(0)
-  const [menu, setMenu] = useState<string | null>(null)
   const pages = Math.max(1, Math.ceil(rows.length / pageSize))
   useEffect(() => setPage(0), [rows.length])
   const view = rows.slice(page * pageSize, page * pageSize + pageSize)
+  const scrolledRef = useRef(false)
+  const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const away = e.currentTarget.scrollLeft > 0 || e.currentTarget.scrollTop > 0
+    if (away !== scrolledRef.current) { scrolledRef.current = away; onScrolledChange?.(away) }
+  }
   const stickyW = 132
+  /** Height of the group header row (h-7), so the column header row sticks just under it. */
+  const GROUP_ROW_PX = 28
+  // Fixed columns: each its own width, each placed after the widths before it.
+  const widthOf = (i: number) => stickyWidths?.[i] ?? stickyW
+  const leftOf = (i: number) => Array.from({ length: i }, (_, j) => widthOf(j)).reduce((a, b) => a + b, 0)
+  const fixed = (i: number) => (i < sticky ? { left: leftOf(i), width: widthOf(i), minWidth: widthOf(i), maxWidth: widthOf(i) } : undefined)
   return (
     <div className="overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface">
-      <div className="overflow-x-auto">
+      <div className={maxHeight ? 'overflow-auto' : 'overflow-x-auto'} style={maxHeight ? { maxHeight } : undefined} onScroll={onScrolledChange ? onScroll : undefined}>
         <table className="w-full border-separate border-spacing-0 text-[13px]">
           <thead>
             {groups && (
               <tr>
-                {groups.map((g, i) => (
-                  <th key={`${g.label}-${i}`} colSpan={g.span}
-                    className={`whitespace-nowrap border-b border-l border-line px-3 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide first:border-l-0 ${g.edit ? 'bg-primary-soft text-primary' : 'bg-alt text-ink-600'}`}>
-                    {g.label}
-                  </th>
-                ))}
-                {(trailing?.length ?? 0) + (rowMenu ? 1 : 0) > 0 && <th colSpan={(trailing?.length ?? 0) + (rowMenu ? 1 : 0)} className="border-b border-l border-line bg-alt" />}
+                {groups.map((g, i) => {
+                  // A group over the fixed columns is fixed with them; the others keep their name visible just right of
+                  // the fixed columns while their columns scroll under it.
+                  const start = groups.slice(0, i).reduce((n, x) => n + x.span, 0)
+                  const overFixed = start + g.span <= sticky
+                  return (
+                    <th key={`${g.label}-${i}`} colSpan={g.span} style={overFixed ? { left: leftOf(start) } : undefined}
+                      className={`sticky top-0 h-7 whitespace-nowrap border-b border-l border-line bg-alt px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600 first:border-l-0 ${overFixed ? 'z-40' : 'z-30'}`}>
+                      <span className="sticky inline-flex items-center gap-1.5" style={overFixed ? undefined : { left: leftOf(sticky) + 12 }}>{g.label}{g.edit && <Pencil className="size-3" />}</span>
+                    </th>
+                  )
+                })}
+                {(trailing?.length ?? 0) + (rowMenu ? 1 : 0) > 0 && <th colSpan={(trailing?.length ?? 0) + (rowMenu ? 1 : 0)} className="sticky top-0 z-30 h-7 border-b border-l border-line bg-alt" />}
               </tr>
             )}
             <tr>
               {cols.map(([label, key], i) => (
                 <th
                   key={label}
-                  style={i < sticky ? { left: i * stickyW, minWidth: stickyW } : undefined}
-                  className={`sticky top-0 whitespace-nowrap border-b border-line px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide ${editable?.has(key) ? 'bg-primary-soft text-primary' : 'bg-alt text-ink-600'} ${i < sticky ? 'z-20' : 'z-10'} ${i === sticky - 1 ? 'border-r' : ''}`}
+                  style={{ ...fixed(i), top: groups ? GROUP_ROW_PX : 0 }}
+                  className={`sticky overflow-hidden text-ellipsis whitespace-nowrap border-b border-line px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide bg-alt text-ink-600 ${i < sticky ? 'z-20' : 'z-10'} ${i === sticky - 1 ? 'border-r' : ''}`}
                 >
-                  {label}
+                  {editable?.has(key) ? <span className="inline-flex items-center gap-1">{label}<Pencil className="size-3 shrink-0" /></span> : label}
                 </th>
               ))}
-              {trailing?.map((t) => <th key={t.label} className="border-b border-line bg-alt px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">{t.label}</th>)}
-              {rowMenu && <th className="sticky right-0 z-20 border-b border-l border-line bg-alt px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">Action</th>}
+              {trailing?.map((t) => <th key={t.label} style={{ top: groups ? GROUP_ROW_PX : 0 }} className="sticky z-10 border-b border-line bg-alt px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">{t.label}</th>)}
+              {rowMenu && <th style={{ top: groups ? GROUP_ROW_PX : 0 }} className="sticky right-0 z-20 border-b border-l border-line bg-alt px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">Action</th>}
             </tr>
           </thead>
           <tbody>
@@ -257,12 +343,16 @@ export function DataGrid<T>({
             {view.map((r) => {
               const k = rowKey(r)
               return (
-                <tr key={k} onClick={() => onRowClick?.(r)} className={`group ${onRowClick ? 'cursor-pointer' : ''} ${rowClass?.(r) ?? ''}`}>
+                <tr key={k}
+                  onClick={openOn === 'click' ? () => onRowClick?.(r) : undefined}
+                  onDoubleClick={openOn === 'dblclick' ? () => onRowClick?.(r) : undefined}
+                  onMouseDown={openOn === 'dblclick' ? (e) => { if (e.detail > 1) e.preventDefault() } : undefined} className={`group ${onRowClick ? 'cursor-pointer' : ''} ${rowClass?.(r) ?? ''}`}>
                   {cols.map(([label, key, kind], i) => (
                     <td
                       key={label}
-                      style={i < sticky ? { left: i * stickyW, minWidth: stickyW } : undefined}
-                      className={`whitespace-nowrap border-b border-line px-3 py-2.5 group-hover:bg-canvas ${i < sticky ? 'sticky z-[5] bg-surface' : editable?.has(key) ? 'bg-primary-soft/40' : ''} ${i === sticky - 1 ? 'border-r' : ''}`}
+                      style={fixed(i)}
+                      title={i < sticky ? String(r[key] ?? '') : undefined}
+                      className={`whitespace-nowrap border-b border-line px-3 py-2.5 group-hover:bg-canvas ${i < sticky ? 'sticky z-[5] overflow-hidden text-ellipsis bg-surface' : ''} ${i === sticky - 1 ? 'border-r' : ''}`}
                     >
                       <Cell kind={kind} v={r[key]} />
                     </td>
@@ -270,17 +360,13 @@ export function DataGrid<T>({
                   {trailing?.map((t) => <td key={t.label} className="whitespace-nowrap border-b border-line px-3 py-2.5 group-hover:bg-canvas">{t.render(r)}</td>)}
                   {rowMenu && (
                     <td className="sticky right-0 z-[5] border-b border-l border-line bg-surface px-2 py-1.5 group-hover:bg-canvas" onClick={(e) => e.stopPropagation()}>
-                      <div className="relative">
-                        <button aria-label="Open menu" onClick={() => setMenu(menu === k ? null : k)} className="rounded-md p-1.5 text-ink-600 hover:bg-alt hover:text-ink-900">
-                          <MoreHorizontal className="size-4" />
-                        </button>
-                        {menu === k && (
-                          <div className="absolute right-0 z-30 mt-1 w-40 rounded-[var(--radius)] border border-line bg-surface p-1 shadow-lg" onMouseLeave={() => setMenu(null)}>
-                            {rowMenu(r).map((m) => (
-                              <button key={m.label} onClick={() => { setMenu(null); m.onClick() }} className="block w-full rounded px-2.5 py-1.5 text-left text-[13px] hover:bg-alt">{m.label}</button>
-                            ))}
-                          </div>
-                        )}
+                      <div className="relative flex items-center gap-0.5">
+                        {/* The pencil (editable row) or eye (view only) opens the row, the same as the double-click / click. */}
+                        {onRowClick && (editable && editable.size > 0 && (rowEditable?.(r) ?? true)
+                          ? <button title="Edit this row" aria-label="Edit this row" onClick={() => onRowClick(r)} className="pf-press rounded-md p-1.5 text-ink-600 transition-colors duration-150 hover:bg-alt hover:text-ink-900"><Pencil className="size-3.5" /></button>
+                          : <button title="View this row" aria-label="View this row" onClick={() => onRowClick(r)} className="pf-press rounded-md p-1.5 text-ink-600 transition-colors duration-150 hover:bg-alt hover:text-ink-900"><Eye className="size-3.5" /></button>)}
+                        {onRowHistory && <button title="History: who changed what and when" aria-label="History" onClick={() => onRowHistory(r)} className="pf-press rounded-md p-1.5 text-ink-600 transition-colors duration-150 hover:bg-alt hover:text-ink-900"><History className="size-3.5" /></button>}
+                        <RowMenu items={() => rowMenu(r)} />
                       </div>
                     </td>
                   )}
@@ -319,3 +405,11 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   )
 }
 export const inputCls = fieldCls
+
+/** A multi-line text box with the same look (its own height + padding, so the cursor starts at the first line). */
+export const textareaCls = fieldCls.replace('h-9 ', '') + ' min-h-[68px] py-2 leading-5'
+
+/** A date field (our animated calendar, components/pickers.tsx). Value / onChange as YYYY-MM-DD ('' = empty). */
+export function DateInput({ value, onChange, className = '' }: { value: string; onChange: (v: string) => void; className?: string }) {
+  return <DatePicker value={value} onChange={onChange} className={className} />
+}
