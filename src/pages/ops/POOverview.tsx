@@ -99,9 +99,9 @@ function useServerList<I, R>(
 }
 
 export default function POOverview() {
-  const [tab, setTab] = useState<'shipment' | 'lines'>('shipment')
+  const [tab, setTab] = useState<'shipment' | 'lines'>('lines')
   // Both tabs stay mounted once opened, so switching keeps each one's filters and rows.
-  const [seen, setSeen] = useState<Record<string, boolean>>({ shipment: true })
+  const [seen, setSeen] = useState<Record<string, boolean>>({ lines: true })
   const [full, setFull] = useState(false)
   // Live updates for the whole page (SSE, automatic 60 s polling fallback): rows changed by others swap in place.
   const live = useLiveShipments()
@@ -122,20 +122,24 @@ export default function POOverview() {
     <div className={full ? 'pf-fade-in fixed inset-0 z-50 space-y-4 overflow-auto bg-canvas p-5' : 'space-y-5'}>
       <PageTitle title="PO Overview" sub="Every PO at shipment level and SKU-line level · bulk edit via CSV, export anytime"
         right={<div className="flex items-center gap-3"><LiveDot mode={live.mode} /><Button icon={full ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />} onClick={() => setFull(!full)}>{full ? 'Exit full screen' : 'Full screen'}</Button></div>} />
-      <div className="grid grid-cols-2 gap-1 rounded-[var(--radius-card)] bg-alt p-1">
-        {([['shipment', 'Shipment Status', Database], ['lines', 'PO Format Data', Boxes]] as const).map(([k, l, Icon]) => (
+      <div className="relative grid grid-cols-2 gap-1 rounded-[var(--radius-card)] bg-alt p-1">
+        {/* The white pill slides under the picked tab (trial, 2026-10-15: user keeps or undoes it). */}
+        <span aria-hidden className="pf-seg-pill absolute inset-y-1 left-1 w-[calc(50%-6px)] rounded-[var(--radius)] bg-surface shadow-sm ring-1 ring-line"
+          style={{ transform: tab === 'lines' ? 'translateX(0)' : 'translateX(calc(100% + 4px))' }} />
+        {/* PO Format Data first, then Shipment Status (user, 2026-10-15) */}
+        {([['lines', 'PO Format Data', Boxes], ['shipment', 'Shipment Status', Database]] as const).map(([k, l, Icon]) => (
           <button
             key={k}
             onClick={() => { setTab(k); setSeen((v) => ({ ...v, [k]: true })) }}
-            className={`flex items-center justify-center gap-2 rounded-[var(--radius)] py-2 text-[13px] font-semibold transition-all ${tab === k ? 'bg-surface text-ink-900 shadow-sm ring-1 ring-line' : 'text-ink-600 hover:text-ink-900'}`}
+            className={`relative z-[1] flex items-center justify-center gap-2 rounded-[var(--radius)] py-2 text-[13px] font-semibold transition-colors duration-300 ${tab === k ? 'text-ink-900' : 'text-ink-600 hover:text-ink-900'}`}
           >
             <Icon className="size-4" /> {l}
             {totals[k] !== undefined && <span className="tnum text-[11px] font-medium text-ink-400">{totals[k]}</span>}
           </button>
         ))}
       </div>
-      <div hidden={tab !== 'shipment'} className="pf-tab-in"><ShipmentTab options={options} columns={columns} onTotal={shipmentTotal} tableHeight={tableHeight} flash={live.flash} /></div>
-      {seen.lines && <div hidden={tab !== 'lines'} className="pf-tab-in"><LinesTab options={options} columns={columns} onTotal={linesTotal} tableHeight={tableHeight} /></div>}
+      <div hidden={tab !== 'shipment'} className="pf-slide-from-right"><ShipmentTab options={options} columns={columns} onTotal={shipmentTotal} tableHeight={tableHeight} flash={live.flash} /></div>
+      {seen.lines && <div hidden={tab !== 'lines'} className="pf-slide-from-left"><LinesTab options={options} columns={columns} onTotal={linesTotal} tableHeight={tableHeight} /></div>}
     </div>
   )
 }

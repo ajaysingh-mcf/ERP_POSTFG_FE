@@ -40,6 +40,7 @@ export const UI_TEXT = {
 export const ROLE_LABEL: Record<string, string> = { developer: 'Developer', admin: 'Admin' }
 export const TEAM_LABEL: Record<string, string> = {
   planning: 'Planning',
+  copt: 'COPT',
   warehouse: 'Warehouse',
   logistics: 'Logistics',
   accounts: 'Accounts',

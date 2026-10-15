@@ -14,11 +14,12 @@ type Row = Record<string, string | number>
 type FieldDef = { key: string; label: string; options?: readonly string[]; type?: 'number' }
 
 // ---- Seed data --------------------------------------------------------------
-/* PEP SKU master from the backend. Category, sub-category, filling and recipe have no master_skus column (NOT_IN_DB);
+/* PEP SKU master from the backend. Category, sub-category and filling have no master_skus column (NOT_IN_DB);
+   no Recipe column (user, 2026-10-15: not needed);
    a column that exists but is empty stays '' and the grid shows "—". */
 const pepRow = (s: PepSkuItem): Row => ({
   code: s.pepCode, name: s.productName ?? '', brand: s.brand ?? '', type: s.productType ?? '',
-  category: NOT_IN_DB, sub: NOT_IN_DB, filling: NOT_IN_DB, mrp: s.mrp ?? '', gst: s.gstTaxType ? `${s.gstTaxType}%` : '', recipe: NOT_IN_DB,
+  category: NOT_IN_DB, sub: NOT_IN_DB, filling: NOT_IN_DB, mrp: s.mrp ?? '', gst: s.gstTaxType ? `${s.gstTaxType}%` : '',
   ean: s.eanCode ?? '', hsn: s.hsnCode ?? '',
   size: s.lengthMm !== null && s.widthMm !== null && s.heightMm !== null ? `${s.lengthMm} × ${s.widthMm} × ${s.heightMm}` : '',
   weight: s.weightG ?? '', shelfLife: s.shelfLife ?? '', status: s.isActive ? SKU_STATUS.ACTIVE : SKU_STATUS.INACTIVE,
@@ -78,19 +79,17 @@ const status = (r: Row) => r.status === NOT_IN_DB ? notInDb : <Badge tone={r.sta
 
 const CFG: Record<string, Cfg> = {
   pep: {
-    title: 'PEP SKU master', sub: 'Every sellable PEP SKU with its Uniware name, classification, MRP, GST and recipe', key: 'code', entity: 'PEP SKUs', addLabel: 'Add SKU',
+    title: 'PEP SKU master', sub: 'Every sellable PEP SKU with its Uniware name, classification, MRP and GST', key: 'code', entity: 'PEP SKUs', addLabel: 'Add SKU',
     search: ['code', 'name', 'category', 'sub'], placeholder: 'Search SKU code, Uniware name, category…',
     cols: [['SKU Code', 'code', 'mono'], ['Uniware Name', 'name', 'text'], ['Brand', 'brand', 'text'], ['SKU Type', 'type', 'text'], ['Category', 'category', 'text'], ['Sub-Category', 'sub', 'text'], ['Filling', 'filling', 'text'], ['MRP', 'mrp', 'money'], ['GST', 'gst', 'text']],
     fields: [{ key: 'code', label: 'SKU code' }, { key: 'name', label: 'Uniware name' }, { key: 'brand', label: 'Brand' }, { key: 'type', label: 'SKU type' },
       { key: 'category', label: 'Category' }, { key: 'sub', label: 'Sub-category' }, { key: 'filling', label: 'Filling' }, { key: 'mrp', label: 'MRP (₹)' },
-      { key: 'gst', label: 'GST' }, { key: 'recipe', label: 'Recipe code' }, { key: 'ean', label: 'EAN' }, { key: 'hsn', label: 'HSN code' },
+      { key: 'gst', label: 'GST' }, { key: 'ean', label: 'EAN' }, { key: 'hsn', label: 'HSN code' },
       { key: 'size', label: 'Size L × W × H (mm)' }, { key: 'weight', label: 'Weight (g)' }, { key: 'shelfLife', label: 'Shelf life' }, { key: 'status', label: 'Status' }],
     filters: [],
     filterKeys: [['brand', 'Brand'], ['type', 'SKU Type'], ['gst', 'GST'], ['status', 'Status']],
     readOnly: true,
     trailing: [
-      { label: 'Recipe', render: (r) => r.recipe === NOT_IN_DB ? notInDb
-        : r.recipe ? <span className="font-mono text-[12.5px]">{r.recipe}</span> : <span className="inline-flex items-center gap-1 text-[12px] text-warn"><AlertTriangle className="size-3.5" />No Recipe</span> },
       { label: 'Status', render: status },
     ],
   },

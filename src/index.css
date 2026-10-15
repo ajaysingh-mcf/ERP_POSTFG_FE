@@ -157,3 +157,18 @@ input, textarea, select {
 @keyframes pf-copy-chip { 0% { opacity: 0; transform: translateY(-50%) scale(0.9); } 12% { opacity: 1; transform: translateY(-50%) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; } }
 .pf-copy-chip { animation: pf-copy-chip 1.2s ease-out forwards; }
 
+/*
+ * PO Overview tab switch (trial, 2026-10-15): the white pill glides to the picked tab, and the new tab's content
+ * slides in from its side (left tab from the left, right tab from the right). A hidden element shown again replays
+ * its animation, so nothing has to remount (the pages stay loaded).
+ */
+.pf-seg-pill { transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes pf-slide-from-left { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+@keyframes pf-slide-from-right { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+.pf-slide-from-left { animation: pf-slide-from-left 320ms cubic-bezier(0.22, 1, 0.36, 1); }
+.pf-slide-from-right { animation: pf-slide-from-right 320ms cubic-bezier(0.22, 1, 0.36, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .pf-seg-pill { transition: none; }
+  .pf-slide-from-left, .pf-slide-from-right { animation: none; }
+}
+
