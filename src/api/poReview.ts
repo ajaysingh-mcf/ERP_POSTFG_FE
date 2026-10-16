@@ -11,6 +11,8 @@ export type PoReviewItem = {
   status: string
   ocrStatus: string
   source: string
+  /** Email subject; for an API PO the channel's name for it (Amazon: the shipment name). */
+  subject: string | null
   fileName: string
   poDate: string | null
   receivedAt: string | null

@@ -5,6 +5,7 @@ import { DataGrid, FilterPanel, SectionToolbar, exportRows, inputCls, useSection
 import { BRANDS, OPS_CHANNELS, type ColKind } from '../../lib/ops'
 import { daysBefore, istDateTime, istDay } from '../../lib/time'
 import { InReview } from './POReview'
+import { FileCell, SourceCell } from './SourceCells'
 import { DummySection } from '../../components/DummyData'
 import { listPoReview, type PoReviewItem } from '../../api/poReview'
 import { ApiError } from '../../api/client'
@@ -42,6 +43,8 @@ export default function POProcessing() {
 type ProcessedRow = {
   id: string; poNumber: string; channel: string; brand: string; processedAt: string
   lines: number | null; units: number | null; value: number | null; saleOrder: string; source: string; file: string
+  /** Raw source value (api / email / manual) for the icon, and the subject the Source cell copies. */
+  sourceKey: string; subject: string | null
 }
 
 const PCOLS: [string, keyof ProcessedRow, ColKind][] = [
@@ -51,7 +54,7 @@ const PCOLS: [string, keyof ProcessedRow, ColKind][] = [
 
 const toRow = (r: PoReviewItem): ProcessedRow => ({
   id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', brand: r.brand ?? '', processedAt: istDateTime(r.completedAt),
-  lines: r.lines, units: r.units, value: r.poValue, saleOrder: r.saleOrderCode ?? '', source: SOURCE_LABELS[r.source] ?? r.source, file: r.fileName,
+  lines: r.lines, units: r.units, value: r.poValue, saleOrder: r.saleOrderCode ?? '', source: SOURCE_LABELS[r.source] ?? r.source, file: r.fileName, sourceKey: r.source, subject: r.subject,
 })
 
 const distinct = (rows: ProcessedRow[], k: keyof ProcessedRow) => [...new Set(rows.map((r) => String(r[k] ?? '')).filter(Boolean))].sort()
@@ -119,8 +122,8 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
       ) : (
         <DataGrid cols={PCOLS} rows={s.filtered} rowKey={(r) => r.id}
           trailing={[
-            { label: 'Source', render: (r) => { const I = SRC_ICON[r.source as keyof typeof SRC_ICON] ?? Mail; return <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-600"><I className="size-3.5" />{r.source}</span> } },
-            { label: 'Original file', render: (r) => <span className="inline-flex items-center gap-1 text-ink-600"><Link2 className="size-3.5" /><span className="font-mono text-[12px]">{r.file}</span></span> },
+            { label: 'Source', render: (r) => <SourceCell source={r.source} subject={r.subject} fallback={r.poNumber} icon={SRC_ICON[r.source as keyof typeof SRC_ICON] ?? Mail} /> },
+            { label: 'Original file', render: (r) => <FileCell uploadId={r.id} name={r.file} /> },
           ]} />
       )}
     </div>

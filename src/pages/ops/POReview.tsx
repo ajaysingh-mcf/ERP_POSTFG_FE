@@ -17,6 +17,7 @@ import { PATHS } from '../../constants/pages'
 import { useAuth } from '../../auth/AuthContext'
 import { istDateTime } from '../../lib/time'
 import { SkuPicker } from './SkuPicker'
+import { FileCell, SourceCell } from './SourceCells'
 
 /*
  * In Review: POs that failed validation (GET /po-review?status=needs_review), oldest first, and the review panel
@@ -28,6 +29,7 @@ import { SkuPicker } from './SkuPicker'
 type ReviewRow = {
   id: string; poNumber: string; channel: string; receivedAt: string; lines: number | null; value: number | null
   openIssues: number; issueTypes: string[]; source: string; file: string
+  subject: string | null
 }
 
 const RCOLS: [string, keyof ReviewRow, ColKind][] = [
@@ -37,7 +39,7 @@ const RCOLS: [string, keyof ReviewRow, ColKind][] = [
 
 const toRow = (r: PoReviewItem): ReviewRow => ({
   id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', receivedAt: istDateTime(r.receivedAt), lines: r.lines, value: r.poValue,
-  openIssues: r.openIssues, issueTypes: r.issueTypes, source: SOURCE_LABELS[r.source] ?? r.source, file: r.fileName,
+  openIssues: r.openIssues, issueTypes: r.issueTypes, source: SOURCE_LABELS[r.source] ?? r.source, file: r.fileName, subject: r.subject,
 })
 
 const distinct = (values: string[]) => [...new Set(values.filter(Boolean))].sort()
@@ -120,8 +122,8 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
           trailing={[
             { label: 'Issues', render: (r) => <span className="flex flex-wrap gap-1">{r.issueTypes.map((t) => <Badge key={t} tone="crit">{label(t)}</Badge>)}</span> },
             { label: 'Open issues', render: (r) => <span className="tnum text-crit">{r.openIssues}</span> },
-            { label: 'Source', render: (r) => { const I = srcIcon[r.source] ?? Mail; return <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-600"><I className="size-3.5" />{r.source}</span> } },
-            { label: 'Original file', render: (r) => <span className="inline-flex items-center gap-1 font-mono text-[12px] text-primary"><Link2 className="size-3.5" />{r.file}</span> },
+            { label: 'Source', render: (r) => <SourceCell source={r.source} subject={r.subject} fallback={r.poNumber} icon={srcIcon[r.source] ?? Mail} /> },
+            { label: 'Original file', render: (r) => <FileCell uploadId={r.id} name={r.file} /> },
             { label: '', render: () => <span className="text-[12px] font-semibold text-primary">Review →</span> },
           ]} />
       )}

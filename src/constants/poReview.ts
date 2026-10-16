@@ -1,6 +1,8 @@
 /* PO review API (POST_FG GET /po-review): statuses, limits and how the screens show its values. */
 
 export const PO_REVIEW_ENDPOINT = '/po-review'
+/** The PO's original file, streamed from S3 (opens in a browser tab: PDF, sheet, an API's JSON). */
+export const PO_FILE_PATH = (uploadId: string) => `${PO_REVIEW_ENDPOINT}/${encodeURIComponent(uploadId)}/file`
 
 /** po_uploads.status values the screens ask for. */
 export const PO_STATUS = {
