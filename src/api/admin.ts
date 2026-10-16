@@ -32,7 +32,8 @@ export type UserBody = { email?: string; name?: string; roles?: string[]; team?:
 
 export type RoleItem = { key: string; label: string; description: string | null; isSystem: boolean; users: number; grants: Record<string, AccessLevel> }
 export type RolePage = { slug: string; label: string; section: string; isSection: boolean }
-export type RoleBody = { label?: string; description?: string | null; grants?: Record<string, AccessLevel> }
+/** Roles are a fixed list (backend ROLE_CATALOG): only a role's page access can be changed here. */
+export type RoleBody = { grants: Record<string, AccessLevel> }
 
 const json = (method: string, body: unknown) => ({ method, body: JSON.stringify(body) })
 
@@ -44,5 +45,4 @@ export const resendWelcome = (id: number) => api<{ sent: boolean; error: string 
 
 export const listRoles = (signal?: AbortSignal) => api<RoleItem[]>(ADMIN_ENDPOINT.ROLES, { signal })
 export const getRolePages = (signal?: AbortSignal) => api<RolePage[]>(ADMIN_ENDPOINT.ROLE_PAGES, { signal })
-export const createRole = (body: RoleBody) => api<RoleItem>(ADMIN_ENDPOINT.ROLES, json('POST', body))
 export const updateRole = (key: string, body: RoleBody) => api<RoleItem>(ADMIN_ENDPOINT.ROLE(key), json('PATCH', body))

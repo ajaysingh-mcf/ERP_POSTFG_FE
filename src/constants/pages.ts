@@ -14,6 +14,7 @@ export const PATHS = {
   PEP_SKUS: '/masters/pep-skus',
   CHANNEL_SKUS: '/masters/channel-skus',
   CHANNEL_CUSTOMERS: '/masters/channel-customers',
+  CHANNEL_LOCATIONS: '/masters/channel-locations',
   WAREHOUSES: '/masters/warehouses',
   OPERATIONS: '/operations',
   PO_OVERVIEW: '/operations/po-overview',
@@ -42,7 +43,8 @@ export const LIVE_PAGES: ReadonlySet<string> = new Set<string>([
   PATHS.CHANNEL_SKUS, // GET /masters/channel-skus; status has no DB column (NOT_IN_DB)
   PATHS.PO_OVERVIEW, // GET /po-overview/shipments + /lines + /filter-options (our POs)
   PATHS.CHANNEL_CUSTOMERS, // GET /masters/channel-customers; legal name, type, GSTIN, terms, margin, PO source = NOT_IN_DB
-  PATHS.WAREHOUSES, // GET /masters/warehouses/pep + /channel; no warehouse table, so most PEP facility fields = NOT_IN_DB
+  PATHS.CHANNEL_LOCATIONS, // GET /masters/channel-locations (details_channels)
+  PATHS.WAREHOUSES, // GET /masters/warehouses/pep; no warehouse table, so most PEP facility fields = NOT_IN_DB
 ])
 
 /** Dev builds only: mark pages that still show sample data. */
@@ -64,7 +66,8 @@ export const MASTER_TAB_BY_PATH: Record<string, string> = {
   [PATHS.PEP_SKUS]: MASTER_TABS[0],
   [PATHS.CHANNEL_SKUS]: MASTER_TABS[1],
   [PATHS.CHANNEL_CUSTOMERS]: MASTER_TABS[2],
-  [PATHS.WAREHOUSES]: MASTER_TABS[3],
+  [PATHS.CHANNEL_LOCATIONS]: MASTER_TABS[3],
+  [PATHS.WAREHOUSES]: MASTER_TABS[4],
 }
 
 export const NAV_GROUPS: NavGroup[] = [

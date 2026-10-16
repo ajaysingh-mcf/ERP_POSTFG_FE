@@ -20,7 +20,7 @@ export const ADMIN_TEXT = {
   TITLE: 'Users & Roles',
   SUB: 'Add people, give them a role (which pages they can open, view or edit), a PO Overview team and facilities. They get a welcome email and sign in with Google.',
   ADD_USER: 'Add user',
-  NEW_ROLE: 'New role',
+  FIXED_ROLES: 'Roles are a fixed list. To add a new role, ask the developer (it is added with a migration).',
   SYSTEM_ROLE: 'Built-in role: full access to every page. It cannot be changed here.',
   NO_ADMIN_PAGE: 'Users & Roles stays with admins and developers; it cannot be given to a role.',
   EMAIL_NOT_SENT: 'Not sent',

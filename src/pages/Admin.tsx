@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Check, Lock, Mail, Plus, Search, ShieldCheck, UserPlus, X } from 'lucide-react'
+import { AlertTriangle, Check, Info, Lock, Mail, Search, ShieldCheck, UserPlus, X } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Badge, Button, Drawer, PageTitle, SubTabs } from '../components/ui'
 import { DataGrid, Field, MultiSelect, inputCls } from '../components/kit'
 import { SelectBox } from '../components/pickers'
 import { ApiError } from '../api/client'
 import {
-  createRole, createUser, getRolePages, getUserOptions, listRoles, listUsers, resendWelcome, updateRole, updateUser,
+  createUser, getRolePages, getUserOptions, listRoles, listUsers, resendWelcome, updateRole, updateUser,
   type AccessLevel, type AdminUser, type RoleItem, type RolePage, type UserBody, type UserOptions,
 } from '../api/admin'
 import { ACCESS_LABEL, ACCESS_LEVELS, ADMIN_TEXT } from '../constants/admin'
@@ -15,9 +15,10 @@ import type { ColKind } from '../lib/ops'
 
 /*
  * Users & Roles (2026-10-15, user): admins / developers add people with a role, a PO Overview team and facilities;
- * the backend saves them, gives the access and sends the welcome email (Resend when it failed). Roles tab: a role =
- * which pages it may open, each Hidden / View / Edit. Built-in roles (admin, developer) are read-only. Nobody is deleted:
- * people are switched off.
+ * the backend saves them, gives the access and sends the welcome email (Resend when it failed). Roles tab: a FIXED list
+ * of roles (user, 2026-10-16: no creating or renaming on the screen; new roles are added by the developer); an admin
+ * can change a role's page access (Hidden / View / Edit). Built-in roles (admin, developer) are read-only. Nobody is
+ * deleted: people are switched off.
  */
 
 type Tab = 'users' | 'roles'
@@ -193,17 +194,17 @@ function RolesTab() {
   const qc = useQueryClient()
   const roles = useQuery({ queryKey: ['admin', 'roles'], queryFn: ({ signal }) => listRoles(signal) })
   const pages = useQuery({ queryKey: ['admin', 'role-pages'], queryFn: ({ signal }) => getRolePages(signal) })
-  const [sel, setSel] = useState<string | 'new' | null>(null)
+  const [sel, setSel] = useState<string | null>(null)
   const [notice, setNotice] = useState<Notice>(null)
   useEffect(() => { if (!sel && roles.data?.length) setSel(roles.data.find((r) => !r.isSystem)?.key ?? roles.data[0].key) }, [roles.data, sel])
-  const role = sel === 'new' ? null : roles.data?.find((r) => r.key === sel) ?? null
+  const role = roles.data?.find((r) => r.key === sel) ?? null
 
   return (
     <div className="space-y-3">
       <NoticeBar notice={notice} onClose={() => setNotice(null)} />
       <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
         <div className="space-y-1.5">
-          <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setSel('new')}>{ADMIN_TEXT.NEW_ROLE}</Button>
+          <p className="flex items-start gap-1.5 text-[11.5px] text-ink-400"><Info className="mt-0.5 size-3.5 shrink-0" />{ADMIN_TEXT.FIXED_ROLES}</p>
           <ul className="mt-2 space-y-1">
             {(roles.data ?? []).map((r) => (
               <li key={r.key}>
@@ -217,22 +218,20 @@ function RolesTab() {
             ))}
           </ul>
         </div>
-        {pages.data && sel && (
-          <RoleEditor key={sel} role={role} pages={pages.data}
-            onSaved={(r, created) => { setNotice({ tone: 'ok', text: created ? `Role "${r.label}" created.` : ADMIN_TEXT.SAVED }); setSel(r.key); void qc.invalidateQueries({ queryKey: ['admin'] }) }} />
+        {pages.data && role && (
+          <RoleEditor key={role.key} role={role} pages={pages.data}
+            onSaved={(r) => { setNotice({ tone: 'ok', text: `${r.label}: page access saved.` }); void qc.invalidateQueries({ queryKey: ['admin'] }) }} />
         )}
       </div>
     </div>
   )
 }
 
-function RoleEditor({ role, pages, onSaved }: { role: RoleItem | null; pages: RolePage[]; onSaved: (r: RoleItem, created: boolean) => void }) {
-  const [label, setLabel] = useState(role?.label ?? '')
-  const [description, setDescription] = useState(role?.description ?? '')
+function RoleEditor({ role, pages, onSaved }: { role: RoleItem; pages: RolePage[]; onSaved: (r: RoleItem) => void }) {
   const [grants, setGrants] = useState<Record<string, AccessLevel>>(() => Object.fromEntries(pages.map((p) => [p.slug, role?.grants[p.slug] ?? 'none'])))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const locked = !!role?.isSystem
+  const locked = role.isSystem
   const sections = useMemo(() => [...new Set(pages.map((p) => p.section))], [pages])
 
   // A section's level is copied to its pages (they can still be set one by one after).
@@ -246,21 +245,17 @@ function RoleEditor({ role, pages, onSaved }: { role: RoleItem | null; pages: Ro
     setBusy(true)
     setError(null)
     try {
-      const body = { label: label.trim(), description: description.trim() || null, grants }
-      onSaved(role ? await updateRole(role.key, body) : await createRole(body), !role)
+      onSaved(await updateRole(role.key, { grants }))
     } catch (e) { setError(errText(e)) } finally { setBusy(false) }
   }
 
   return (
     <div className="rounded-[var(--radius-card)] border border-line bg-surface p-4">
       {locked && <div className="mb-3 flex items-center gap-2 rounded-[var(--radius)] bg-primary-soft px-3 py-2 text-[12.5px] text-primary"><Lock className="size-4" />{ADMIN_TEXT.SYSTEM_ROLE}</div>}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-[12px] font-medium text-ink-900">Role name *
-          <input value={label} disabled={locked} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Warehouse Ops" className={`${inputCls} mt-1`} />
-        </label>
-        <label className="block text-[12px] font-medium text-ink-900">Description
-          <input value={description} disabled={locked} onChange={(e) => setDescription(e.target.value)} placeholder="Who gets this role" className={`${inputCls} mt-1`} />
-        </label>
+      <div>
+        <div className="text-[15px] font-semibold text-ink-900">{role.label}</div>
+        {role.description && <div className="mt-0.5 text-[12.5px] text-ink-600">{role.description}</div>}
+        <div className="mt-0.5 text-[11.5px] text-ink-400">{role.users} user{role.users === 1 ? '' : 's'} have this role</div>
       </div>
       <div className="mt-4 overflow-hidden rounded-[var(--radius)] border border-line">
         <table className="w-full text-[13px]">
@@ -290,7 +285,7 @@ function RoleEditor({ role, pages, onSaved }: { role: RoleItem | null; pages: Ro
       {!locked && (
         <div className="mt-3 flex items-center justify-end gap-2">
           {error && <span className="mr-auto flex items-center gap-1 text-[12px] text-crit"><AlertTriangle className="size-3.5" />{error}</span>}
-          <Button variant="primary" onClick={save} disabled={busy || !label.trim()}>{busy ? 'Saving…' : role ? 'Save role' : 'Create role'}</Button>
+          <Button variant="primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save page access'}</Button>
         </div>
       )}
     </div>
