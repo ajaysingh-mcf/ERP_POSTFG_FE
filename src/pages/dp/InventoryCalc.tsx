@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Badge, PageTitle, SubTabs } from '../../components/ui'
 import { DataGrid, FilterPanel, SectionToolbar, exportRows, useSection, type FilterDef } from '../../components/kit'
+import { Reveal } from '../../components/shell'
 import Inventory from '../Inventory'
 import { agingBand, computeInventory, overallInventory, CHANNELS, PIVOT_FACILITIES, type InventoryRowComputed, type OverallSku } from '../../lib/data'
 import { channelInventory, type ColKind } from '../../lib/ops'
@@ -34,7 +35,7 @@ function ChannelView() {
   return (
     <div className="space-y-3">
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search channel…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active} entity="Channel inventory" onExport={(e) => exportRows('inventory_channel', e, cols, s.filtered)} />
-      {s.open && <FilterPanel defs={[{ key: 'channel', label: 'Channel', type: 'multi', options: CHANNELS }]} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} />}
+      <Reveal open={s.open}><FilterPanel defs={[{ key: 'channel', label: 'Channel', type: 'multi', options: CHANNELS }]} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       <DataGrid cols={cols} rows={s.filtered} rowKey={(r) => r.channel} trailing={[{ label: 'Aging', render: (r) => <Aging d={r.aging} /> }]} />
     </div>
   )
@@ -48,7 +49,7 @@ function SkuView() {
   return (
     <div className="space-y-3">
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search SKU code or name…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active} entity="SKU inventory" onExport={(e) => exportRows('inventory_sku', e, cols, s.filtered)} />
-      {s.open && <FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} />}
+      <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       <DataGrid cols={cols} rows={s.filtered} rowKey={(r) => r.sku} trailing={[{ label: 'Aging', render: (r) => <Aging d={r.aging} /> }]} />
     </div>
   )
@@ -100,7 +101,7 @@ function TypeView() {
   return (
     <div className="space-y-3">
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search SKU, channel…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active} entity="Inventory by type" onExport={(e) => exportRows('inventory_type', e, cols, s.filtered)} />
-      {s.open && <FilterPanel defs={[{ key: 'type', label: 'Type', type: 'multi', options: ['B2C', 'D2C'] }, { key: 'channel', label: 'Channel', type: 'multi', options: CHANNELS }]} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} />}
+      <Reveal open={s.open}><FilterPanel defs={[{ key: 'type', label: 'Type', type: 'multi', options: ['B2C', 'D2C'] }, { key: 'channel', label: 'Channel', type: 'multi', options: CHANNELS }]} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       <DataGrid cols={cols} rows={s.filtered} rowKey={(r) => r.sku + r.channel} trailing={[{ label: 'Aging', render: (r) => <Aging d={r.aging} /> }]} />
     </div>
   )

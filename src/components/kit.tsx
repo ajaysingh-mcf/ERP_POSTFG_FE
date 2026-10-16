@@ -138,8 +138,9 @@ export function FilterPanel({ defs, value, onApply, onClose }: { defs: FilterDef
         ))}
       </div>
       <div className="mt-4 flex justify-end gap-2">
-        <button onClick={() => { setDraft({}); onApply({}) }} className="h-8 rounded-[var(--radius)] border border-line px-3 text-[13px] font-medium hover:bg-canvas">Clear</button>
-        <button onClick={() => onApply(draft)} className="h-8 rounded-[var(--radius)] bg-primary px-3.5 text-[13px] font-semibold text-white hover:opacity-90">Apply</button>
+        {/* Apply and Clear both close the panel once done, on every page (user, 2026-10-16). */}
+        <button onClick={() => { setDraft({}); onApply({}); onClose() }} className="h-8 rounded-[var(--radius)] border border-line px-3 text-[13px] font-medium hover:bg-canvas">Clear</button>
+        <button onClick={() => { onApply(draft); onClose() }} className="h-8 rounded-[var(--radius)] bg-primary px-3.5 text-[13px] font-semibold text-white hover:opacity-90">Apply</button>
       </div>
     </div>
   )

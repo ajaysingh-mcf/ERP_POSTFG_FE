@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, FileSpreadsheet, FileText, FileUp, Link2, Webhook, Zap, Mail } from 'lucide-react'
 import { Badge, PageTitle, SubTabs } from '../../components/ui'
 import { DataGrid, FilterPanel, SectionToolbar, exportRows, inputCls, useSection, type FilterDef } from '../../components/kit'
+import { Reveal } from '../../components/shell'
 import { BRANDS, OPS_CHANNELS, type ColKind } from '../../lib/ops'
 import { daysBefore, istDateTime, istDay } from '../../lib/time'
 import { InReview } from './POReview'
@@ -109,7 +110,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
             {(from !== defaultFrom || to !== today) && <button onClick={() => { setFrom(defaultFrom); setTo(today) }} className="ml-1 font-medium text-primary">Last {PROCESSED_DEFAULT_DAYS} days</button>}
           </div>
         } />
-      {s.open && <FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} />}
+      <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       {state.error ? (
         <div className="flex items-center gap-3 rounded-[var(--radius)] border border-crit/30 bg-crit-soft px-4 py-3 text-[13px] text-crit">
           <AlertTriangle className="size-4" /> Could not load processed POs: {state.error}

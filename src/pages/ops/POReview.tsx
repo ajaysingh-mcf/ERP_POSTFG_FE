@@ -3,6 +3,7 @@ import type { ComponentType } from 'react'
 import { AlertTriangle, Check, Download, ExternalLink, FileText, Link2, Mail, X } from 'lucide-react'
 import { Badge, Button } from '../../components/ui'
 import { DataGrid, FilterPanel, SectionToolbar, applyFilters, exportRows, inputCls, useSection, type FilterDef } from '../../components/kit'
+import { Reveal } from '../../components/shell'
 import type { ColKind } from '../../lib/ops'
 import {
   getPoFile, getPoReview, listPoReview, rejectPo, submitPo,
@@ -106,7 +107,7 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
       )}
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search PO number, ingest ID, channel, file…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active}
         entity="In-review POs" onExport={(e) => exportRows('in_review', e, RCOLS, shown)} />
-      {s.open && <FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} />}
+      <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       {state.error ? (
         <div className="flex items-center gap-3 rounded-[var(--radius)] border border-crit/30 bg-crit-soft px-4 py-3 text-[13px] text-crit">
           <AlertTriangle className="size-4" /> Could not load POs in review: {state.error}
@@ -124,7 +125,13 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
             { label: 'Open issues', render: (r) => <span className="tnum text-crit">{r.openIssues}</span> },
             { label: 'Source', render: (r) => <SourceCell source={r.source} subject={r.subject} fallback={r.poNumber} icon={srcIcon[r.source] ?? Mail} /> },
             { label: 'Original file', render: (r) => <FileCell uploadId={r.id} name={r.file} /> },
-            { label: '', render: () => <span className="text-[12px] font-semibold text-primary">Review →</span> },
+            // A button (not text): one click opens the review panel, the same as a double-click, instead of being copied.
+            { label: '', render: (r) => (
+              <button type="button" onClick={() => setSel(r)}
+                className="pf-press group/rv inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] font-semibold text-primary transition-colors duration-150 hover:bg-primary-soft">
+                Review <span className="transition-transform duration-200 group-hover/rv:translate-x-0.5">→</span>
+              </button>
+            ) },
           ]} />
       )}
       {sel && <ReviewPanel uploadId={sel.id} poNumber={sel.poNumber} onClose={() => setSel(null)} onDone={done} onStale={() => setReload((n) => n + 1)}
@@ -134,6 +141,9 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
 }
 
 // ---- Review panel ---------------------------------------------------------------------------------------------------
+
+/** The review panel's open / close animation (ms), the same as .pf-panel-in / -out in index.css. */
+const PANEL_MS = 220
 
 const money = (v: Num | number) => (v === '' ? '—' : `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
 const plain = (v: Num | string | null | undefined) => (v === '' || v === null || v === undefined ? '' : String(v))
@@ -145,11 +155,14 @@ type LineEdit = { pep: string; qty: string; mrp: string; rate: string }
 const lineKey = (l: PoReviewLine) => String(l.lineNo)
 const startOf = (l: PoReviewLine): LineEdit => ({ pep: l.pepCode, qty: plain(l.qty), mrp: plain(l.poMrp), rate: plain(l.poUnitPrice) })
 
-function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale, gone = false }: {
+function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, gone = false }: {
   uploadId: string; poNumber: string; onClose: () => void; onDone: (message: string) => void; onStale: () => void
   /** The live list no longer has this PO: someone else submitted or rejected it meanwhile. */
   gone?: boolean
 }) {
+  // Opens with a short rise + fade and closes the same way (user, 2026-10-16: smooth both ways); X, Close and Esc wait for it.
+  const [leaving, setLeaving] = useState(false)
+  const onClose = useCallback(() => { setLeaving(true); setTimeout(closeNow, PANEL_MS) }, [closeNow])
   const { accessFor } = useAuth()
   const canEdit = accessFor(PATHS.PO_REVIEW) === ACCESS.EDITOR
   const [data, setData] = useState<PoReviewDetail | null>(null)
@@ -311,7 +324,7 @@ function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale, gone = fals
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-surface">
+    <div className={`fixed inset-0 z-50 flex flex-col bg-surface ${leaving ? 'pf-panel-out' : 'pf-panel-in'}`}>
       <div className="flex items-start justify-between border-b border-line px-5 py-3">
         <div>
           <div className="flex items-baseline gap-2">
