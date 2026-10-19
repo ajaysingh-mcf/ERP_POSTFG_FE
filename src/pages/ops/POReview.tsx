@@ -1,8 +1,9 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentType } from 'react'
+import { useChannelOptions } from '../../lib/channels'
 import { AlertTriangle, Check, Download, ExternalLink, FileText, Link2, Mail, X } from 'lucide-react'
 import { Badge, Button } from '../../components/ui'
-import { DataGrid, FilterPanel, SectionToolbar, applyFilters, exportRows, inputCls, useSection, type FilterDef } from '../../components/kit'
+import { DataGrid, FilterChips, FilterPanel, SectionToolbar, applyFilters, exportRows, inputCls, useSection, type FilterDef } from '../../components/kit'
 import { Reveal } from '../../components/shell'
 import type { ColKind } from '../../lib/ops'
 import {
@@ -34,7 +35,8 @@ type ReviewRow = {
 }
 
 const RCOLS: [string, keyof ReviewRow, ColKind][] = [
-  ['Ingest ID', 'id', 'mono'], ['PO Number', 'poNumber', 'mono'], ['Channel', 'channel', 'text'], ['Received At', 'receivedAt', 'mono'],
+  // Ingest ID left out of the screen and the download (user, 2026-10-16); rows still use it as their key.
+  ['PO Number', 'poNumber', 'mono'], ['Channel', 'channel', 'text'], ['Received At', 'receivedAt', 'mono'],
   ['Lines', 'lines', 'num'], ['Value', 'value', 'money'],
 ]
 
@@ -74,6 +76,10 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
     return () => ctrl.abort()
   }, [reload, liveTick, onCount])
 
+  // Ticked rows (by id): CSV / Excel download only these; none ticked = every row shown. Rows that left the list drop out.
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const picked = rows.filter((r) => selected.has(r.id))
+
   // A row has several issue types, so the Issue filter is applied here; search and the other filters by the shared helper.
   const s = useSection<ReviewRow>(rows, ['poNumber', 'id', 'channel', 'file'])
   const { issue, ...others } = s.filters
@@ -84,8 +90,9 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
     return applyFilters(searched, others).filter((r) => !picked.length || r.issueTypes.some((t) => picked.includes(label(t))))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, s.q, s.filters])
+  const channelOptions = useChannelOptions(rows.map((r) => r.channel))
   const defs: FilterDef[] = [
-    { key: 'channel', label: 'Channel', type: 'multi', options: distinct(rows.map((r) => r.channel)) },
+    { key: 'channel', label: 'Channel', type: 'multi', options: channelOptions },
     { key: 'source', label: 'Source', type: 'multi', options: distinct(rows.map((r) => r.source)) },
     { key: 'issue', label: 'Issue', type: 'multi', options: distinct(rows.flatMap((r) => r.issueTypes.map(label))) },
   ]
@@ -106,8 +113,10 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
         </div>
       )}
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search PO number, ingest ID, channel, file…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active}
-        entity="In-review POs" onExport={(e) => exportRows('in_review', e, RCOLS, shown)} />
+        entity="In-review POs" onExport={(e) => exportRows('in_review', e, RCOLS, picked.length ? picked : shown)}
+        selectedCount={picked.length} onClearSelection={() => setSelected(new Set())} />
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
+      {!s.open && <FilterChips defs={defs} value={s.filters} onChange={s.setFilters} />}
       {state.error ? (
         <div className="flex items-center gap-3 rounded-[var(--radius)] border border-crit/30 bg-crit-soft px-4 py-3 text-[13px] text-crit">
           <AlertTriangle className="size-4" /> Could not load POs in review: {state.error}
@@ -118,7 +127,7 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
       ) : !rows.length ? (
         <div className={box}>No POs are waiting for review.</div>
       ) : (
-        <DataGrid cols={RCOLS} rows={shown} rowKey={(r) => r.id} onRowClick={setSel}
+        <DataGrid cols={RCOLS} rows={shown} rowKey={(r) => r.id} onRowClick={setSel} selected={selected} onSelectedChange={setSelected}
           rowClass={() => '[&>td:first-child]:shadow-[inset_3px_0_0_var(--color-crit)]'}
           trailing={[
             { label: 'Issues', render: (r) => <span className="flex flex-wrap gap-1">{r.issueTypes.map((t) => <Badge key={t} tone="crit">{label(t)}</Badge>)}</span> },

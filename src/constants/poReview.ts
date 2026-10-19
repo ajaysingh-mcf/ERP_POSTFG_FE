@@ -140,3 +140,41 @@ export const PO_REVIEW_REMARK_MAX = 500
 /** Live PO Review + Approvals (POST_FG REVIEW_LIVE): SSE at <base>/events, version for polling at <base>/live-state. */
 export const REVIEW_LIVE = { EVENTS: '/events', STATE: '/live-state', EVENT_CHANGE: 'review', PO_REVIEW_BASE: '/po-review', APPROVALS_BASE: '/approvals' } as const
 
+/* ---- Uniware hand-off on the Processed tab (2026-10-19): download the sale order CSV, then mark it uploaded ---- */
+export const UNIWARE_ENDPOINT = {
+  ONE: (uploadId: string) => `${PO_REVIEW_ENDPOINT}/${encodeURIComponent(uploadId)}/uniware-csv`,
+  MANY: `${PO_REVIEW_ENDPOINT}/uniware-csv`,
+  MARK: `${PO_REVIEW_ENDPOINT}/uniware-uploaded`,
+} as const
+
+/** Days waiting (since processed, not yet in Uniware): from WARN yellow, from CRIT red, before that grey (user, 2026-10-19). */
+export const UNIWARE_AGE = { WARN_DAYS: 5, CRIT_DAYS: 10 } as const
+
+export const UNIWARE_STATE = { PENDING: 'pending', DOWNLOADED: 'downloaded', UPLOADED: 'uploaded' } as const
+export type UniwareState = (typeof UNIWARE_STATE)[keyof typeof UNIWARE_STATE]
+/** The Uniware filter's options (labels the person sees). */
+export const UNIWARE_STATE_LABEL: Record<UniwareState, string> = {
+  pending: 'Not downloaded',
+  downloaded: 'Downloaded, not in Uniware',
+  uploaded: 'In Uniware',
+}
+
+export const UNIWARE_TEXT = {
+  COLUMN: 'Uniware',
+  NOT_DOWNLOADED: 'Not downloaded',
+  NOT_DOWNLOADED_HINT: 'Sale order CSV not downloaded yet: tick the row and click "Download sale order CSV". Until it is in Uniware it does not show in PO Overview.',
+  WAITING_UPLOAD: 'Not in Uniware',
+  IN_UNIWARE: 'In Uniware',
+  MARK_UPLOADED: 'Mark uploaded',
+  AGE_HINT: 'Days since the PO was processed: yellow from 5 days, red from 10',
+  SORT_HINT: 'Sort: ↓ waiting longest first (in Uniware last) · ↑ the reverse · click again to clear',
+  DOWNLOADED_BY: 'Downloaded by',
+  UPLOADED_BY: 'Marked uploaded by',
+  BULK_DOWNLOAD: (n: number) => `Download sale order CSV (${n})`,
+  BULK_MARK: (n: number) => `Mark uploaded (${n})`,
+  DOWNLOADED: (n: number) => (n === 1 ? 'Sale order CSV downloaded. Upload it into Uniware, then click "Mark uploaded".' : `One CSV with ${n} sale orders downloaded. Upload it into Uniware, then mark them uploaded.`),
+  MARKED: (n: number) => `${n} PO${n === 1 ? '' : 's'} marked uploaded into Uniware: now in PO Overview.`,
+  UNDONE: (n: number) => `Upload mark removed from ${n} PO${n === 1 ? '' : 's'}: back to waiting, out of PO Overview.`,
+  SUMMARY: (pending: number, downloaded: number) => `${pending} not downloaded · ${downloaded} downloaded, not in Uniware`,
+} as const
+

@@ -13,6 +13,11 @@ export type PoReviewItem = {
   source: string
   /** Email subject; for an API PO the channel's name for it (Amazon: the shipment name). */
   subject: string | null
+  /** Uniware hand-off (completed POs): first CSV download and the uploaded-into-Uniware mark. */
+  csvDownloadedAt: string | null
+  csvDownloadedBy: string | null
+  uniwareUploadedAt: string | null
+  uniwareUploadedBy: string | null
   fileName: string
   poDate: string | null
   receivedAt: string | null
@@ -196,3 +201,9 @@ export function submitPo(uploadId: string, body: ResubmitBody) {
 export function rejectPo(uploadId: string, remark: string) {
   return api<{ status: string; rejectedIssues: string[] }>(`${one(uploadId)}/reject`, { method: 'POST', body: JSON.stringify({ remark }) })
 }
+
+/* POST /po-review/uniware-uploaded: mark POs uploaded into Uniware (or undo); they then show in PO Overview. */
+export function markUniwareUploaded(uploadIds: string[], undo = false) {
+  return api<{ changed: string[] }>(`${PO_REVIEW_ENDPOINT}/uniware-uploaded`, { method: 'POST', body: JSON.stringify({ uploadIds, undo }) })
+}
+
