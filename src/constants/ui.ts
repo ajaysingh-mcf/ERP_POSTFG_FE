@@ -34,5 +34,7 @@ export const COPYABLE_COLUMNS: ReadonlySet<string> = new Set([
   'po number', 'channel', 'brand', 'sale order', 'source', 'po source',
   'sku', 'sku code', 'pep code', 'channel sku', 'channel sku code',
   'facility', 'location', 'location code',
+  // Amazon Inbound (2026-10-19): plan and shipment ids, FC.
+  'plan', 'fba id', 'fc',
 ])
 

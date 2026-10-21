@@ -10,6 +10,7 @@ import Admin from './pages/Admin'
 import POOverview from './pages/ops/POOverview'
 import POProcessing from './pages/ops/POProcessing'
 import POWorking from './pages/ops/POWorking'
+import AmazonInbound from './pages/ops/AmazonInbound'
 import ShortSkus from './pages/ops/ShortSkus'
 import InventoryCalc from './pages/dp/InventoryCalc'
 import DrrAging from './pages/dp/DrrAging'
@@ -99,6 +100,7 @@ export default function App() {
     [PATHS.PO_OVERVIEW, <POOverview />],
     [PATHS.PO_REVIEW, <POProcessing />],
     [PATHS.PO_WORKING, <POWorking prio={prio} setPrio={setPrio} />],
+    [PATHS.AMAZON_INBOUND, <AmazonInbound />],
     [PATHS.SKUS_SHORT, <ShortSkus priority={prio} />],
     [PATHS.OPS_ANALYTICS, <Analytics go={() => navigate(PATHS.INVENTORY)} />],
     [PATHS.INVENTORY, <InventoryCalc />],

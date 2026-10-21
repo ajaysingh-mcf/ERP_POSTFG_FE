@@ -20,6 +20,8 @@ export const PATHS = {
   PO_OVERVIEW: '/operations/po-overview',
   PO_REVIEW: '/operations/po-review',
   PO_WORKING: '/operations/po-working',
+  /** Amazon inbound plans + FBA shipments (2026-10-19). */
+  AMAZON_INBOUND: '/operations/amazon-inbound',
   SKUS_SHORT: '/operations/skus-short',
   OPS_ANALYTICS: '/operations/analytics',
   PLANNING: '/planning',
@@ -45,6 +47,7 @@ export const LIVE_PAGES: ReadonlySet<string> = new Set<string>([
   PATHS.CHANNEL_CUSTOMERS, // GET /masters/channel-customers; legal name, type, GSTIN, terms, margin, PO source = NOT_IN_DB
   PATHS.CHANNEL_LOCATIONS, // GET /masters/channel-locations (details_channels)
   PATHS.WAREHOUSES, // GET /masters/warehouses/pep; no warehouse table, so most PEP facility fields = NOT_IN_DB
+  PATHS.AMAZON_INBOUND, // GET /amazon/inbound/* (inbound plans + shipments)
 ])
 
 /** Dev builds only: mark pages that still show sample data. */
@@ -83,6 +86,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: PATHS.PO_OVERVIEW, label: 'PO Overview' },
       { path: PATHS.PO_REVIEW, label: 'PO Processing & Review' },
       { path: PATHS.PO_WORKING, label: 'PO Working' },
+      { path: PATHS.AMAZON_INBOUND, label: 'Amazon Inbound' },
       { path: PATHS.SKUS_SHORT, label: 'SKUs Short' },
       { path: PATHS.OPS_ANALYTICS, label: 'Analytics' },
     ],
