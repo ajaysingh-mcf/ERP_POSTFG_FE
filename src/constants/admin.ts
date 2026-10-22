@@ -28,3 +28,16 @@ export const ADMIN_TEXT = {
   SAVED: 'Saved.',
   RESENT: (email: string) => `Welcome email sent to ${email}.`,
 } as const
+
+/**
+ * Users & Roles -> Settings (2026-10-22, user: "keep it as tabs so we can add more later"): one inner tab per group of
+ * settings. Add a new group here and its component in pages/Admin.tsx SettingsTab.
+ */
+export const SETTINGS_SECTIONS = [
+  { key: 'po-verify', label: 'PO verification', hint: 'Verify POs against the original before the Uniware CSV, per channel' },
+  // DUMMY groups (pages/SettingsDummy.tsx): only to see the layout; nothing is saved.
+  { key: 'notifications', label: 'Notifications', hint: 'Dummy: emails and alerts', dummy: true },
+  { key: 'review-rules', label: 'PO review rules', hint: 'Dummy: tolerances and approval', dummy: true },
+  { key: 'channel-apis', label: 'Channel APIs', hint: 'Dummy: Amazon / Uniware sync', dummy: true },
+] as const
+export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]['key']

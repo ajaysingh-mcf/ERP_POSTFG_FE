@@ -9,19 +9,22 @@ import {
   createUser, getRolePages, getUserOptions, listRoles, listUsers, resendWelcome, updateRole, updateUser,
   type AccessLevel, type AdminUser, type RoleItem, type RolePage, type UserBody, type UserOptions,
 } from '../api/admin'
-import { ACCESS_LABEL, ACCESS_LEVELS, ADMIN_TEXT } from '../constants/admin'
+import { ACCESS_LABEL, ACCESS_LEVELS, ADMIN_TEXT, SETTINGS_SECTIONS, type SettingsSection } from '../constants/admin'
 import { istDateTime } from '../lib/time'
 import type { ColKind } from '../lib/ops'
+import { VerifySettings } from './ops/VerifySettings'
+import { ChannelApisDummy, NotificationsDummy, ReviewRulesDummy } from './SettingsDummy'
+import { VERIFY_SETTINGS_TEXT } from '../constants/poVerify'
 
 /*
  * Users & Roles (2026-10-15, user): admins / developers add people with a role, a PO Overview team and facilities;
  * the backend saves them, gives the access and sends the welcome email (Resend when it failed). Roles tab: a FIXED list
  * of roles (user, 2026-10-16: no creating or renaming on the screen; new roles are added by the developer); an admin
  * can change a role's page access (Hidden / View / Edit). Built-in roles (admin, developer) are read-only. Nobody is
- * deleted: people are switched off.
+ * deleted: people are switched off. Settings tab (2026-10-22): the verify-before-Uniware switch per channel (VerifySettings).
  */
 
-type Tab = 'users' | 'roles'
+type Tab = 'users' | 'roles' | 'settings'
 type Notice = { tone: 'ok' | 'err'; text: string } | null
 const errText = (e: unknown) => (e instanceof ApiError ? (Array.isArray(e.details) ? (e.details as { message: string }[]).map((d) => d.message).join(' · ') : e.message) : String(e))
 
@@ -32,8 +35,33 @@ export default function Admin() {
   return (
     <div className="space-y-5">
       <PageTitle title={ADMIN_TEXT.TITLE} sub={ADMIN_TEXT.SUB} />
-      <SubTabs value={tab} onChange={setTab} tabs={[{ key: 'users', label: 'Users', count: users.data?.length }, { key: 'roles', label: 'Roles', count: roles.data?.length }]} />
-      <div key={tab} className="pf-tab-in">{tab === 'users' ? <UsersTab /> : <RolesTab />}</div>
+      <SubTabs value={tab} onChange={setTab} tabs={[{ key: 'users', label: 'Users', count: users.data?.length }, { key: 'roles', label: 'Roles', count: roles.data?.length }, { key: 'settings', label: VERIFY_SETTINGS_TEXT.TAB }]} />
+      <div key={tab} className="pf-tab-in">{tab === 'users' ? <UsersTab /> : tab === 'roles' ? <RolesTab /> : <SettingsTab />}</div>
+    </div>
+  )
+}
+
+// ---- Settings: one inner tab per group (SETTINGS_SECTIONS), so more settings can be added later ----------------------
+
+function SettingsTab() {
+  const [section, setSection] = useState<SettingsSection>(SETTINGS_SECTIONS[0].key)
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-1 rounded-[var(--radius)] bg-alt/70 p-1">
+        {SETTINGS_SECTIONS.map((s) => (
+          <button key={s.key} type="button" onClick={() => setSection(s.key)} title={s.hint}
+            className={`rounded-md px-3 py-1.5 text-[12.5px] font-semibold transition-colors duration-150 ${section === s.key ? 'bg-primary text-white shadow-sm' : 'text-ink-600 hover:bg-surface hover:text-ink-900'}`}>
+            {s.label}
+            {'dummy' in s && <span className="ml-1.5 rounded bg-warn-soft px-1 text-[10px] font-semibold text-warn">dummy</span>}
+          </button>
+        ))}
+      </div>
+      <div key={section} className="pf-tab-in">
+        {section === 'po-verify' && <VerifySettings />}
+        {section === 'notifications' && <NotificationsDummy />}
+        {section === 'review-rules' && <ReviewRulesDummy />}
+        {section === 'channel-apis' && <ChannelApisDummy />}
+      </div>
     </div>
   )
 }
