@@ -60,14 +60,59 @@ export const REVIEW_ERROR = {
   NOT_IN_REVIEW: 'UPLOAD_NOT_IN_REVIEW',
 } as const
 
-/** File types the browser can show in the document viewer; the rest are offered as a download. */
-export const PREVIEW_TYPES = { PDF: ['pdf'], HTML: ['html', 'htm'], IMAGE: ['png', 'jpg', 'jpeg'] } as const
+/**
+ * File types the in-app viewer shows (components/FileViewer, 2026-10-21, user: view every file without downloading).
+ * SHEET is read by SheetJS 0.20.3 (vendor/xlsx-0.20.3.tgz), which goes by the bytes, so a CSV saved as ".XLS" still
+ * opens. JSON is shown as tables (CSV-like). The rest are offered as a download.
+ */
+export const PREVIEW_TYPES = {
+  PDF: ['pdf'],
+  SHEET: ['xlsx', 'xlsm', 'xlsb', 'xls', 'csv', 'tsv', 'ods'],
+  JSON: ['json'],
+  HTML: ['html', 'htm'],
+  IMAGE: ['png', 'jpg', 'jpeg', 'gif', 'webp'],
+  TEXT: ['txt', 'xml', 'log', 'eml'],
+} as const
+
+/** Sheet / JSON tables: at most this many rows and columns are drawn (the rest are counted, not shown). */
+export const FILE_VIEWER = { MAX_ROWS: 2000, MAX_COLS: 100, DETAILS: 'Details', RAW: 'Raw JSON' } as const
+
+/** In-app file viewer texts. */
+export const FILE_VIEWER_TEXT = {
+  LOADING: 'Loading the file…',
+  FAILED: 'Could not read this file here. Download it to view it.',
+  EMPTY: 'This sheet is empty.',
+  NO_MATCH: 'No rows match.',
+  FIND: 'Find in this table…',
+  CAPPED: (shown: number, total: number) => `Showing the first ${shown.toLocaleString('en-IN')} of ${total.toLocaleString('en-IN')} rows.`,
+  ROWS: (n: number) => `${n.toLocaleString('en-IN')} row${n === 1 ? '' : 's'}`,
+  SAVE_CSV: 'Download this table as CSV',
+  DOWNLOAD: 'Download the original file',
+  OPEN_TAB: 'Open in a new tab',
+  CLOSE: 'Close (Esc)',
+  CHILD_ROWS: (n: number) => `${n} row${n === 1 ? '' : 's'} →`,
+  FIND_PDF: 'Find in this PDF…',
+  FIND_TEXT: 'Find in this file…',
+  FIND_IMAGE: 'Images cannot be searched',
+  PDF_NO_TEXT: 'No text to search (scanned PDF)',
+  SEARCHING: 'Searching…',
+  NO_MATCHES: 'No matches',
+  MATCH: (n: number, total: number) => `${n} of ${total}`,
+  PREV: 'Previous match (Shift+Enter)',
+  NEXT: 'Next match (Enter)',
+} as const
 
 /**
  * The page-by-page PDF viewer: zoom steps are multiples of "fit to width" (1 = the page fills the box's width);
  * padding is the gap in px around the page.
  */
-export const PDF_VIEWER = { ZOOM_STEPS: [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4], FIT: 1, PADDING: 16 } as const
+export const PDF_VIEWER = { ZOOM_STEPS: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4], FIT: 1, PADDING: 16 } as const
+
+/** The full-screen "View" opens PDFs at 50% of fit-to-width, so the whole page shows at once (user, 2026-10-21). */
+export const FULL_SCREEN_PDF_ZOOM = 0.5
+
+/** Search in the viewer: waits this long after the last key before searching. */
+export const FIND_DEBOUNCE_MS = 250
 
 /** Review panel texts. */
 export const REVIEW_TEXT = {

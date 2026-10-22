@@ -1,7 +1,7 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentType } from 'react'
 import { useChannelOptions } from '../../lib/channels'
-import { AlertTriangle, Check, Download, ExternalLink, FileText, Link2, Mail, X } from 'lucide-react'
+import { AlertTriangle, Check, ExternalLink, Link2, Mail, X } from 'lucide-react'
 import { Badge, Button } from '../../components/ui'
 import { DataGrid, FilterChips, FilterPanel, SectionToolbar, applyFilters, exportRows, inputCls, useSection, type FilterDef } from '../../components/kit'
 import { Reveal } from '../../components/shell'
@@ -12,7 +12,7 @@ import {
 } from '../../api/poReview'
 import { ApiError } from '../../api/client'
 import {
-  ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, PREVIEW_TYPES, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED,
+  ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED,
 } from '../../constants/poReview'
 import { ACCESS } from '../../constants/auth'
 import { PATHS } from '../../constants/pages'
@@ -20,6 +20,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { istDateTime } from '../../lib/time'
 import { SkuPicker } from './SkuPicker'
 import { FileCell, SourceCell } from './SourceCells'
+import { FileViewer } from '../../components/FileViewer'
 
 /*
  * In Review: POs that failed validation (GET /po-review?status=needs_review), oldest first, and the review panel
@@ -551,60 +552,25 @@ function ResolvedMark({ ok }: { ok: boolean }) {
     : <span className="ml-auto text-[11.5px] font-medium text-crit">{REVIEW_TEXT.TO_RESOLVE}</span>
 }
 
-// pdf.js is large: loaded only when a PDF is opened in the review panel.
-const PdfViewer = lazy(() => import('../../components/PdfViewer').then((m) => ({ default: m.PdfViewer })))
-
 /**
- * The PO file in the Figma viewer frame: PDFs one page at a time (page arrows, zoom, drag), images inline, the email
- * body sandboxed, anything else as a download. Open / download use short-lived S3 links.
+ * The PO file in the Figma viewer frame, shown in the app for every type (components/FileViewer): PDFs page by page,
+ * sheets as grids, JSON as tables, the email body sandboxed. Open in a new tab uses the short-lived S3 link.
  */
 function DocumentViewer({ data }: { data: PoReviewDetail }) {
   const url = data.files.poFile
   const fileName = data.upload.fileName
-  const type = (data.files.poFileType ?? fileName.split('.').pop() ?? '').toLowerCase()
-  const is = (list: readonly string[]) => list.includes(type)
   const uploadId = data.upload.uploadId
   const load = useCallback((signal: AbortSignal) => getPoFile(uploadId, signal), [uploadId])
-
-  const title = (
-    <>
-      <FileText className="size-4 shrink-0" />
-      <span className="min-w-0 truncate font-medium" title={fileName}>{fileName}</span>
-    </>
-  )
-  const actions = url && (
-    <>
-      <a href={url} target="_blank" rel="noreferrer" title="Open in a new tab" className="hover:opacity-100"><ExternalLink className="size-4" /></a>
-      <a href={data.files.poFileDownload ?? url} download={fileName} title="Download" className="hover:opacity-100"><Download className="size-4" /></a>
-    </>
-  )
-  if (url && is(PREVIEW_TYPES.PDF)) {
+  if (!url) {
     return (
-      <Suspense fallback={<div className="flex-1 rounded-[var(--radius-card)] bg-[#323639] p-6 text-center text-[13px] text-white/80">{REVIEW_TEXT.PDF_LOADING}</div>}>
-        <PdfViewer load={load} title={title} actions={actions} loadingText={REVIEW_TEXT.PDF_LOADING} failedText={REVIEW_TEXT.PDF_FAILED} />
-      </Suspense>
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center rounded-[var(--radius-card)] bg-[#323639] p-6 text-center text-[13px] text-white/80">
+        {REVIEW_TEXT.NO_FILE}
+      </div>
     )
   }
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-card)] bg-[#323639]">
-      <div className="flex items-center gap-3 px-4 py-2.5 text-[13px] text-white/90">
-        <div className="flex min-w-0 flex-1 items-center gap-2">{title}</div>
-        {actions && <span className="flex shrink-0 items-center gap-3 opacity-80">{actions}</span>}
-      </div>
-      <div className="min-h-0 flex-1 bg-[#525659]">
-        {!url ? (
-          <div className="p-6 text-center text-[13px] text-white/80">{REVIEW_TEXT.NO_FILE}</div>
-        ) : is(PREVIEW_TYPES.HTML) ? (
-          <iframe src={url} title={fileName} sandbox="" className="h-full w-full border-0 bg-white" />
-        ) : is(PREVIEW_TYPES.IMAGE) ? (
-          <div className="h-full overflow-auto p-5"><img src={url} alt={fileName} className="mx-auto bg-white shadow-xl" /></div>
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-[13px] text-white/80">
-            {REVIEW_TEXT.NO_PREVIEW}
-            <a href={data.files.poFileDownload ?? url} download={fileName} className="inline-flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1.5 font-semibold text-white hover:bg-white/20"><Download className="size-4" />Download {fileName}</a>
-          </div>
-        )}
-      </div>
-    </div>
+    <FileViewer load={load} fileName={fileName} type={data.files.poFileType} actions={
+      <a href={url} target="_blank" rel="noreferrer" title={FILE_VIEWER_TEXT.OPEN_TAB} className="hover:opacity-100"><ExternalLink className="size-4" /></a>
+    } />
   )
 }
