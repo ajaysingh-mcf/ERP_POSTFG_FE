@@ -7,15 +7,18 @@ import { ACCESS, AUTH_ENDPOINTS, ERROR_CODE, type AccessLevel } from '../constan
 
 /** team = the person's PO Overview team (planning, copt, warehouse, logistics, accounts, viewer), null = none. */
 export type User = { id: string; name: string; email: string; roles: string[]; team: string | null; roleLabels?: Record<string, string> }
-type Me = { user: User; access: Record<string, AccessLevel> }
+/** capabilities = special permissions on / off (e.g. po-review:edit-all, 2026-10-22). */
+type Me = { user: User; access: Record<string, AccessLevel>; capabilities?: Record<string, boolean> }
 
 type AuthState =
   | { status: 'loading' }
   | { status: 'signedOut'; error?: string }
-  | { status: 'signedIn'; user: User; access: Record<string, AccessLevel> }
+  | { status: 'signedIn'; user: User; access: Record<string, AccessLevel>; capabilities: Record<string, boolean> }
 
 type AuthValue = AuthState & {
   accessFor: (path: string) => AccessLevel
+  /** A special permission (CAPABILITY …) of the signed-in person. */
+  can: (capability: string) => boolean
   logout: () => Promise<void>
 }
 
@@ -26,7 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     api<Me>(AUTH_ENDPOINTS.ME)
-      .then((me) => setState({ status: 'signedIn', user: me.user, access: me.access }))
+      .then((me) => setState({ status: 'signedIn', user: me.user, access: me.access, capabilities: me.capabilities ?? {} }))
       .catch((e: unknown) => {
         const code = e instanceof ApiError ? e.code : ERROR_CODE.NETWORK
         setState({ status: 'signedOut', error: code === ERROR_CODE.UNAUTHENTICATED ? undefined : code })
@@ -38,6 +41,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [state],
   )
 
+  const can = useCallback(
+    (capability: string): boolean => state.status === 'signedIn' && !!state.capabilities[capability],
+    [state],
+  )
+
   const logout = useCallback(async () => {
     try {
       await api(AUTH_ENDPOINTS.LOGOUT, { method: 'POST' })
@@ -46,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  return <AuthContext.Provider value={{ ...state, accessFor, logout }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ ...state, accessFor, can, logout }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

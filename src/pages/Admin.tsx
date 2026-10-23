@@ -12,7 +12,7 @@ import {
 import { ACCESS_LABEL, ACCESS_LEVELS, ADMIN_TEXT, SETTINGS_SECTIONS, type SettingsSection } from '../constants/admin'
 import { istDateTime } from '../lib/time'
 import type { ColKind } from '../lib/ops'
-import { VerifySettings } from './ops/VerifySettings'
+import { Toggle, VerifySettings } from './ops/VerifySettings'
 import { ChannelApisDummy, NotificationsDummy, ReviewRulesDummy } from './SettingsDummy'
 import { VERIFY_SETTINGS_TEXT } from '../constants/poVerify'
 
@@ -289,7 +289,27 @@ function RoleEditor({ role, pages, onSaved }: { role: RoleItem; pages: RolePage[
         <table className="w-full text-[13px]">
           <thead className="bg-alt"><tr><th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">Page</th><th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">Access</th></tr></thead>
           <tbody>
-            {sections.map((s) => pages.filter((p) => p.section === s).map((p) => (
+            {sections.map((s) => pages.filter((p) => p.section === s).map((p, idx) => [
+              // A group with no section page of its own (Special permissions) gets a title row.
+              idx === 0 && !p.isSection && (
+                <tr key={`${s}-title`} className="border-t border-line bg-canvas"><td colSpan={2} className="px-3 py-1.5 font-semibold text-ink-900">{s}</td></tr>
+              ),
+              p.isCapability ? (
+                <tr key={p.slug} className="border-t border-line">
+                  <td className="py-1.5 pl-8 pr-3 text-ink-600">
+                    <div>{p.label}</div>
+                    {p.description && <div className="text-[11px] text-ink-400">{p.description}</div>}
+                  </td>
+                  <td className="px-3 py-1.5">
+                    {locked ? <span className="text-[12px] font-medium text-primary">On</span> : (
+                      <span className="inline-flex items-center gap-2.5">
+                        <Toggle on={grants[p.slug] === 'editor'} busy={false} onChange={(v) => set(p, v ? 'editor' : 'none')} />
+                        <span className={`text-[12px] font-semibold ${grants[p.slug] === 'editor' ? 'text-primary' : 'text-ink-400'}`}>{grants[p.slug] === 'editor' ? 'On' : 'Off'}</span>
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ) : (
               <tr key={p.slug} className={`border-t border-line ${p.isSection ? 'bg-canvas' : ''}`}>
                 <td className={`px-3 py-1.5 ${p.isSection ? 'font-semibold text-ink-900' : 'pl-8 text-ink-600'}`}>{p.label}</td>
                 <td className="px-3 py-1.5">
@@ -305,7 +325,8 @@ function RoleEditor({ role, pages, onSaved }: { role: RoleItem; pages: RolePage[
                   )}
                 </td>
               </tr>
-            )))}
+              ),
+            ]))}
           </tbody>
         </table>
       </div>

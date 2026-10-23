@@ -31,7 +31,8 @@ export type UserOptions = {
 export type UserBody = { email?: string; name?: string; roles?: string[]; team?: string | null; facilities?: string[]; status?: 'active' | 'inactive'; sendEmail?: boolean }
 
 export type RoleItem = { key: string; label: string; description: string | null; isSystem: boolean; users: number; grants: Record<string, AccessLevel> }
-export type RolePage = { slug: string; label: string; section: string; isSection: boolean }
+/** isCapability = a special permission (on = editor, off = none), e.g. "PO Review: edit all fields". */
+export type RolePage = { slug: string; label: string; section: string; isSection: boolean; isCapability?: boolean; description?: string | null }
 /** Roles are a fixed list (backend ROLE_CATALOG): only a role's page access can be changed here. */
 export type RoleBody = { grants: Record<string, AccessLevel> }
 

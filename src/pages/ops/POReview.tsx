@@ -21,6 +21,7 @@ import { istDateTime } from '../../lib/time'
 import { SkuPicker } from './SkuPicker'
 import { FileCell, SourceCell } from './SourceCells'
 import { FileViewer } from '../../components/FileViewer'
+import { CAPABILITY, REVIEW_EDIT_TEXT, editRules, fieldOpen, type LineField } from '../../constants/reviewEdit'
 
 /*
  * In Review: POs that failed validation (GET /po-review?status=needs_review), oldest first, and the review panel
@@ -173,8 +174,10 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
   // Opens with a short rise + fade and closes the same way (user, 2026-10-16: smooth both ways); X, Close and Esc wait for it.
   const [leaving, setLeaving] = useState(false)
   const onClose = useCallback(() => { setLeaving(true); setTimeout(closeNow, PANEL_MS) }, [closeNow])
-  const { accessFor } = useAuth()
+  const { accessFor, can } = useAuth()
   const canEdit = accessFor(PATHS.PO_REVIEW) === ACCESS.EDITOR
+  // Only the values with an error, unless the role has "PO Review: edit all fields" (2026-10-22; server checks too).
+  const editAll = can(CAPABILITY.PO_REVIEW_EDIT_ALL)
   const [data, setData] = useState<PoReviewDetail | null>(null)
   const [error, setError] = useState<string>()
   const [edits, setEdits] = useState<Record<string, LineEdit>>({})
@@ -229,6 +232,9 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
   const unresolved = open.filter((i) => !handled(i))
   const rejectOnly = open.some((i) => REJECT_ONLY_ISSUES.includes(i.type))
   const headerIssue = (field: string) => open.find((i) => i.lineNo === null && i.field === field)
+  const rules = useMemo(() => editRules(open), [open])
+  const editable = (l: PoReviewLine, f: LineField) => canEdit && (editAll || fieldOpen(rules, lineKey(l), f))
+  const lockTip = (l: PoReviewLine, f: LineField) => (canEdit && !editable(l, f) ? REVIEW_EDIT_TEXT.LOCKED : undefined)
   const lineIssues = (l: PoReviewLine) => open.filter((i) => i.lineNo !== null && String(i.lineNo) === String(l.lineNo))
   const stillOpenOn = (l: PoReviewLine) => actionError?.stillOpen?.filter((i) => i.lineNo !== null && String(i.lineNo) === String(l.lineNo)) ?? []
   // Issues not shown next to a field or a line: listed (and accepted) in "Other checks".
@@ -326,8 +332,8 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
     const off = ours !== undefined && ours !== null && differs(numOrEmpty(v), ours)
     return (
       <>
-        <input type="number" step="any" min={0} value={v} disabled={!canEdit} onChange={(ev) => setEdits({ ...edits, [lineKey(l)]: { ...e, [k]: ev.target.value } })}
-          className={`tnum h-8 w-24 rounded-md border px-2 ${off ? 'border-crit/60 bg-crit-soft' : 'border-line'} disabled:bg-alt`} />
+        <input type="number" step="any" min={0} value={v} disabled={!editable(l, k)} title={lockTip(l, k)} onChange={(ev) => setEdits({ ...edits, [lineKey(l)]: { ...e, [k]: ev.target.value } })}
+          className={`tnum h-8 w-24 rounded-md border px-2 ${off ? 'border-crit/60 bg-crit-soft' : 'border-line'} disabled:cursor-not-allowed disabled:bg-alt disabled:text-ink-600`} />
         {ours !== undefined && ours !== null && ours !== '' && <div className={`mt-0.5 text-[11px] ${off ? 'text-crit' : 'text-ink-400'}`}>ours {ours}</div>}
       </>
     )
@@ -343,6 +349,7 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
             {data && <span className="font-serif text-[14px] text-ink-600">{data.lines.length} line items</span>}
           </div>
           <p className="text-[12px] text-ink-600">{canEdit ? REVIEW_TEXT.INTRO : REVIEW_TEXT.VIEW_ONLY}</p>
+          {canEdit && <p className="mt-0.5 text-[11.5px] text-ink-400">{editAll ? REVIEW_EDIT_TEXT.EDIT_ALL : REVIEW_EDIT_TEXT.ONLY_ERRORS}</p>}
         </div>
         <button onClick={onClose} className="rounded-md p-1.5 text-ink-400 hover:bg-alt hover:text-ink-900"><X className="size-5" /></button>
       </div>
@@ -381,7 +388,7 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
               {data.locationCandidates.length > 0 ? (
                 <label className="block">
                   <span className={lab}>Delivery location</span>
-                  <select value={locationId} disabled={!canEdit} onChange={(e) => setLocationId(e.target.value)}
+                  <select value={locationId} disabled={!canEdit || !(editAll || rules.location)} title={canEdit && !(editAll || rules.location) ? REVIEW_EDIT_TEXT.LOCKED : undefined} onChange={(e) => setLocationId(e.target.value)}
                     className={`${inputCls} ${picked ? '' : 'border-crit/60 bg-crit-soft'}`}>
                     <option value="">Pick the location…</option>
                     {data.locationCandidates.map((c) => <option key={c.detailsChannelId} value={c.detailsChannelId}>{[c.locationCode, c.pincode].filter(Boolean).join(' · ')}</option>)}
@@ -411,7 +418,7 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
                         <td className="tnum px-2.5 py-2 text-ink-400">{plain(l.lineNo)}</td>
                         <td className="px-2.5 py-2"><div className="font-mono">{l.channelSkuCode || '—'}</div><div className="max-w-[200px] truncate text-[11px] text-ink-600" title={l.description}>{l.description}</div></td>
                         <td className="px-2.5 py-2">
-                          <SkuPicker value={e?.pep ?? ''} options={data.skuOptions} disabled={!canEdit} invalid={!e?.pep}
+                          <SkuPicker value={e?.pep ?? ''} options={data.skuOptions} disabled={!editable(l, 'pep')} invalid={!e?.pep}
                             onChange={(pep) => setEdits({ ...edits, [lineKey(l)]: { ...e, pep } })} />
                           {(o?.skuName ?? (e?.pep === l.pepCode ? l.skuName : '')) && <div className="mt-0.5 max-w-[220px] truncate text-[11px] text-ink-600">{o?.skuName ?? l.skuName}</div>}
                           {errs.map((i) => (
