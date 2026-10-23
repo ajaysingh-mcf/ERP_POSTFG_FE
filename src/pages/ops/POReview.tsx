@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentType } from 'react'
 import { useChannelOptions } from '../../lib/channels'
-import { AlertTriangle, Check, ExternalLink, Link2, Mail, X } from 'lucide-react'
+import { AlertTriangle, Check, ExternalLink, Link2, Mail, RefreshCw, X } from 'lucide-react'
 import { Badge, Button } from '../../components/ui'
 import { DataGrid, FilterChips, FilterPanel, SectionToolbar, applyFilters, exportRows, inputCls, useSection, type FilterDef } from '../../components/kit'
 import { Reveal } from '../../components/shell'
 import type { ColKind } from '../../lib/ops'
 import {
-  getPoFile, getPoReview, listPoReview, rejectPo, submitPo,
+  getPoFile, getPoReview, listPoReview, recheckReview, rejectPo, submitPo,
   type LineCorrection, type Num, type PoReviewDetail, type PoReviewIssue, type PoReviewItem, type PoReviewLine, type ResubmitBody, type StillOpen,
 } from '../../api/poReview'
 import { ApiError } from '../../api/client'
 import {
-  ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED,
+  ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED,
 } from '../../constants/poReview'
 import { ACCESS } from '../../constants/auth'
 import { PATHS } from '../../constants/pages'
@@ -99,6 +99,18 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
     { key: 'issue', label: 'Issue', type: 'multi', options: distinct(rows.flatMap((r) => r.issueTypes.map(label))) },
   ]
 
+  // Re-check after a master fix (2026-10-22): editors only; the result goes into the notice line.
+  const { accessFor } = useAuth()
+  const canEditList = accessFor(PATHS.PO_REVIEW) === ACCESS.EDITOR
+  const [rechecking, setRechecking] = useState(false)
+  const recheck = () => {
+    setRechecking(true)
+    recheckReview()
+      .then((r) => { setNotice(RECHECK_TEXT.RESULT(r.issuesClosed, r.completed.length, r.partly)); setReload((n) => n + 1) })
+      .catch((e: unknown) => setNotice(e instanceof ApiError ? e.message : String(e)))
+      .finally(() => setRechecking(false))
+  }
+
   // Created or rejected: the PO leaves this list (and the list is read again, someone else may have acted too).
   const done = (message: string) => {
     setSel(null)
@@ -116,7 +128,13 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
       )}
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search PO number, ingest ID, channel, file…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active}
         entity="In-review POs" onExport={(e) => exportRows('in_review', e, RCOLS, picked.length ? picked : shown)}
-        selectedCount={picked.length} onClearSelection={() => setSelected(new Set())} />
+        selectedCount={picked.length} onClearSelection={() => setSelected(new Set())}
+        primary={canEditList && rows.length > 0 ? (
+          <button onClick={recheck} disabled={rechecking} title={RECHECK_TEXT.HINT}
+            className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-primary/40 bg-surface px-3 text-[13px] font-semibold text-primary hover:bg-primary-soft disabled:opacity-60">
+            <RefreshCw className={`size-4 ${rechecking ? 'animate-spin' : ''}`} />{rechecking ? RECHECK_TEXT.BUSY : RECHECK_TEXT.BUTTON}
+          </button>
+        ) : undefined} />
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       {!s.open && <FilterChips defs={defs} value={s.filters} onChange={s.setFilters} />}
       {state.error ? (

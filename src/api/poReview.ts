@@ -207,3 +207,12 @@ export function markUniwareUploaded(uploadIds: string[], undo = false) {
   return api<{ changed: string[] }>(`${PO_REVIEW_ENDPOINT}/uniware-uploaded`, { method: 'POST', body: JSON.stringify({ uploadIds, undo }) })
 }
 
+
+/* POST /po-review/recheck (2026-10-22): re-check every PO in review against today's master now; issues the master
+   fixed close, POs with nothing left pass (sale order + CSV). The server also does it every 30 min and after a master
+   load. */
+export function recheckReview() {
+  return api<{ checked: number; issuesClosed: number; completed: { uploadId: string; poNumber: string | null; saleOrder: string }[]; partly: number; failed: number }>(
+    `${PO_REVIEW_ENDPOINT}/recheck`, { method: 'POST' },
+  )
+}

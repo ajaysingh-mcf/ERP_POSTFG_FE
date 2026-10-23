@@ -223,3 +223,14 @@ export const UNIWARE_TEXT = {
   SUMMARY: (pending: number, downloaded: number) => `${pending} not downloaded · ${downloaded} downloaded, not in Uniware`,
 } as const
 
+
+/** In Review: re-check after a master fix (2026-10-22; also automatic every 30 min and after a master load). */
+export const RECHECK_TEXT = {
+  BUTTON: 'Re-check now',
+  BUSY: 'Re-checking…',
+  HINT: "Checks every PO in review against today's master: problems fixed in the master close, POs with nothing left pass (sale order + CSV). Also runs by itself every 30 minutes and after a master load.",
+  RESULT: (closed: number, passed: number, partly: number) =>
+    closed || passed
+      ? `Re-checked: ${closed} problem${closed === 1 ? '' : 's'} fixed in the master closed, ${passed} PO${passed === 1 ? '' : 's'} passed to Processed${partly ? `, ${partly} still need a review for something else` : ''}.`
+      : 'Re-checked: nothing new fixed in the master yet.',
+} as const
