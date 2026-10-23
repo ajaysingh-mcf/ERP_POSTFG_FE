@@ -152,8 +152,9 @@ export function FilterPanel({ defs, value, onApply, onClose }: { defs: FilterDef
   const [draft, setDraft] = useState<FilterValues>(value)
   const set = (k: string, v: string | string[]) => setDraft((d) => ({ ...d, [k]: v }))
   return (
-    // relative z-50: the open dropdowns hang over the table below, never under its fixed (sticky) header cells.
-    <div className="relative z-50 rounded-[var(--radius-card)] border border-primary/25 bg-surface p-4 shadow-[0_1px_0_rgba(79,70,229,0.06)]">
+    // relative z-42: the open dropdowns hang over the table below (its fixed cells go up to z-40), and stay under the
+    // sidebar when it opens over the page (z-45).
+    <div className="relative z-[42] rounded-[var(--radius-card)] border border-primary/25 bg-surface p-4 shadow-[0_1px_0_rgba(79,70,229,0.06)]">
       <div className="mb-3 flex items-center justify-between">
         <div className="text-[13px] font-semibold text-ink-900">Filters</div>
         <button onClick={onClose} className="rounded p-1 text-ink-400 hover:bg-alt hover:text-ink-900"><X className="size-4" /></button>

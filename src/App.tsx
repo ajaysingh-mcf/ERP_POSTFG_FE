@@ -125,7 +125,9 @@ export default function App() {
     <div className={`grid h-full grid-cols-1 transition-[grid-template-columns] duration-300 ease-in-out ${railed ? 'md:grid-cols-[68px_1fr]' : 'md:grid-cols-[248px_1fr]'}`}>
       {/* Left nav rail: a 68px rail when collapsed (or while a table wants the full view); hovering it opens it over
           the page (peek). The panel's width animates; its labels are clipped while it moves. */}
-      <aside className="relative hidden min-h-0 md:block" onMouseEnter={() => railed && setPeek(true)} onMouseLeave={() => setPeek(false)}>
+      {/* Its own layer (z-45): above the tables' frozen columns / header (z up to 40) when it opens over the page,
+          below pop-ups and drawers (z 50+). Fix 2026-10-22: PO Overview's frozen PO Number column showed over it. */}
+      <aside className="relative z-[45] hidden min-h-0 md:block" onMouseEnter={() => railed && setPeek(true)} onMouseLeave={() => setPeek(false)}>
       <div className={`absolute inset-y-0 left-0 z-40 flex min-h-0 flex-col overflow-hidden whitespace-nowrap border-r border-line bg-surface transition-[width,box-shadow] duration-300 ease-in-out ${wide ? 'w-[248px]' : 'w-[68px]'} ${peek ? 'shadow-xl' : ''}`}>
         <div className={`flex gap-2.5 px-4 py-4 ${wide ? 'items-center' : 'flex-col items-center px-0'}`}>
           <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-[13px] font-bold text-white">PF</div>
